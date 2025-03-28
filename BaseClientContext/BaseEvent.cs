@@ -9,7 +9,7 @@ namespace Kzone.Signal
         public event EventHandler<BroadcastDataArgs> OnBroadcastData;
 
         public event EventHandler<StreamReceivedArgs> OnStreamReceived;
-        public Func<RequestContext, Task<ResponseResult>> OnRpcDataReceived { get; set; } = null;
+        public Func<Request, Task<Response>> OnRpcDataReceived { get; set; } = null;
 
         internal void HandleDataReceived(object sender, Header headerPacket, byte[] data)
         {
@@ -21,7 +21,7 @@ namespace Kzone.Signal
             OnStreamReceived?.Invoke(sender, new StreamReceivedArgs(headerPacket, contentLength, stream));
         }
 
-        internal Task<ResponseResult> HandleRpcReceived(RequestContext req)
+        internal Task<Response> HandleRpcReceived(Request req)
         {
             if (OnRpcDataReceived != null)
             {

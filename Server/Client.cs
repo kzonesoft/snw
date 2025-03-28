@@ -238,7 +238,7 @@ namespace Kzone.Signal.Server
 
                         if (DateTime.UtcNow < expiration)
                         {
-                            RequestContext request = new(this, msg.ConversationGuid, msg.Expiration, msg.Header, msgData);
+                            Request request = new(this, msg.ConversationGuid, msg.Expiration, msg.Header, msgData);
 
                             await HandleMessageAndReply(msg, request).ConfigureAwait(false);
                         }
@@ -434,7 +434,7 @@ namespace Kzone.Signal.Server
             }
         }
 
-        private async Task HandleMessageAndReply(Message msg, RequestContext request)
+        private async Task HandleMessageAndReply(Message msg, Request request)
         {
             if (_events.OnRpcDataReceived == null) return;
 

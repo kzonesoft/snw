@@ -14,7 +14,7 @@
 		<NoWarn>$(NoWarn);CS0168;CS8002</NoWarn>
 		<SignAssembly>true</SignAssembly>
 		<AssemblyOriginatorKeyFile>D:\Workspace\Kzone_Project\kzoneStrongNameKey.snk</AssemblyOriginatorKeyFile>
-		<Version>3.1.2.11143-dev0004</Version>
+		<Version>3.1.2.11143-dev0006</Version>
 	</PropertyGroup>
 
 	<ItemGroup>

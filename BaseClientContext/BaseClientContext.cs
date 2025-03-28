@@ -180,7 +180,7 @@ namespace Kzone.Signal
         #region PUBLIC  SEND AND WAIT RESULT
 
 
-        public async Task<ResponseResult> RpcSendAsync(int timeoutMs, Header header, object obj = null)
+        public async Task<Response> RpcRequest(int timeoutMs, Header header, object obj = null)
         {
 
             if (header == null) throw new ArgumentNullException("header is null");
@@ -217,62 +217,62 @@ namespace Kzone.Signal
             }
             catch (Exception e)
             {
-                _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(RpcSendAsync) + " [exception] " + e.Message);
+                _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(RpcRequest) + " [exception] " + e.Message);
                 throw new Exception(e.Message);
             }
         }
 
 
-        public async Task<ResponseResult<T>> RpcSendAsync<T>(int timeOut, Header header, object data = null)
+        public async Task<Response<T>> RpcRequest<T>(int timeOut, Header header, object data = null)
         {
             try
             {
-                var result = await RpcSendAsync(timeOut, header, data).ConfigureAwait(false);
+                var result = await RpcRequest(timeOut, header, data).ConfigureAwait(false);
                 if (result.Header == null)
                 {
-                    return new ResponseResult<T>(ResponseStatusCode.HeaderNull, default);
+                    return new Response<T>(ResponseStatusCode.HeaderNull, default);
                 }
                 var replyStatus = result.Header.GetStatusCode();
                 return replyStatus == ResponseStatusCode.Ok
-                    ? new ResponseResult<T>(replyStatus, result.Data.Deserialize<T>())
-                    : new ResponseResult<T>(replyStatus, default);
+                    ? new Response<T>(replyStatus, result.Data.Deserialize<T>())
+                    : new Response<T>(replyStatus, default);
             }
             catch (ConnectionException)
             {
-                return new ResponseResult<T>(ResponseStatusCode.ConnectionError, default);
+                return new Response<T>(ResponseStatusCode.ConnectionError, default);
             }
             catch (NotSupportedException)
             {
-                return new ResponseResult<T>(ResponseStatusCode.Unsupport, default);
+                return new Response<T>(ResponseStatusCode.Unsupport, default);
             }
             catch (TimeoutException)
             {
-                return new ResponseResult<T>(ResponseStatusCode.Timeout, default);
+                return new Response<T>(ResponseStatusCode.Timeout, default);
             }
             catch (NullReferenceException)
             {
-                return new ResponseResult<T>(ResponseStatusCode.NullValue, default);
+                return new Response<T>(ResponseStatusCode.NullValue, default);
             }
             catch (TaskCanceledException e)
             {
-                return new ResponseResult<T>(ResponseStatusCode.TaskCancel, default);
+                return new Response<T>(ResponseStatusCode.TaskCancel, default);
             }
             catch (Exception)
             {
-                return new ResponseResult<T>(ResponseStatusCode.Unknow, default);
+                return new Response<T>(ResponseStatusCode.Unknow, default);
             }
         }
 
-        public async Task<ResponseResult<T>> RpcSendAsync<T, TEnum>(int timeOut, TEnum dataTag, object data = null) where TEnum : struct
+        public async Task<Response<T>> RpcRequest<T, TEnum>(int timeOut, TEnum dataTag, object data = null) where TEnum : struct
         {
-            return await RpcSendAsync<T>(timeOut, HeaderEx.BuildTag(dataTag), data).ConfigureAwait(false);
+            return await RpcRequest<T>(timeOut, HeaderEx.BuildTag(dataTag), data).ConfigureAwait(false);
         }
 
-        public async Task<ResponseStatusCode> RpcSendAsync<TEnum>(int timeOut, TEnum dataTag, object data = null) where TEnum : struct
+        public async Task<ResponseStatusCode> RpcRequest<TEnum>(int timeOut, TEnum dataTag, object data = null) where TEnum : struct
         {
             try
             {
-                var result = await RpcSendAsync(timeOut, HeaderEx.BuildTag(dataTag), data).ConfigureAwait(false);
+                var result = await RpcRequest(timeOut, HeaderEx.BuildTag(dataTag), data).ConfigureAwait(false);
                 return result.Header.GetStatusCode();
             }
             catch (ConnectionException)
@@ -304,40 +304,40 @@ namespace Kzone.Signal
             }
 
         }
-        public async Task<ResponseResult<T>> RpcSendAsync<T, TEnum>(TEnum dataTag, object data = null) where TEnum : struct
+        public async Task<Response<T>> RpcRequest<T, TEnum>(TEnum dataTag, object data = null) where TEnum : struct
         {
-            return await RpcSendAsync<T, TEnum>(30000, dataTag, data).ConfigureAwait(false);
+            return await RpcRequest<T, TEnum>(30000, dataTag, data).ConfigureAwait(false);
         }
 
-        public async Task<ResponseStatusCode> RpcSendAsync<TEnum>(TEnum dataTag, object data = null) where TEnum : struct
+        public async Task<ResponseStatusCode> RpcRequest<TEnum>(TEnum dataTag, object data = null) where TEnum : struct
         {
-            return await RpcSendAsync(30000, dataTag, data).ConfigureAwait(false);
+            return await RpcRequest(30000, dataTag, data).ConfigureAwait(false);
         }
 
         #endregion
         //
         #region PUBLIC RESPONSE RESULT WHEN RECEIVED
-        public Task<ResponseResult> Ok(object data = null) => Response(ResponseStatusCode.Ok, data);
-        public Task<ResponseResult> Authorize(object data = null) => Response(ResponseStatusCode.Authorize, data);
-        public Task<ResponseResult> UnAuthorize(object data = null) => Response(ResponseStatusCode.Unauthorize, data);
-        public Task<ResponseResult> NotFound(object data = null) => Response(ResponseStatusCode.NotFound, data);
-        public Task<ResponseResult> BadRequest(object data = null) => Response(ResponseStatusCode.BadRequest, data);
-        public Task<ResponseResult> SessionExpired(object data = null) => Response(ResponseStatusCode.SessionExpired, data);
-        public Task<ResponseResult> Newest(object data = null) => Response(ResponseStatusCode.Newest, data);
-        public Task<ResponseResult> OutOfDate(object data = null) => Response(ResponseStatusCode.OutOfDate, data);
-        public Task<ResponseResult> Unsupport(object data = null) => Response(ResponseStatusCode.Unsupport, data);
-        public Task<ResponseResult> UnAvailable(object data = null) => Response(ResponseStatusCode.UnAvailable, data);
-        public Task<ResponseResult> Block(object data = null) => Response(ResponseStatusCode.Block, data);
-        public Task<ResponseResult> Reject(object data = null) => Response(ResponseStatusCode.Reject, data);
-        public Task<ResponseResult> SessionFull(object data = null) => Response(ResponseStatusCode.SessionFull, data);
-        public Task<ResponseResult> Conflict(object data = null) => Response(ResponseStatusCode.Conflict, data);
-        public Task<ResponseResult> Response(ResponseStatusCode reponseStatus, object data)
+        public Task<Response> Ok(object data = null) => Response(ResponseStatusCode.Ok, data);
+        public Task<Response> Authorize(object data = null) => Response(ResponseStatusCode.Authorize, data);
+        public Task<Response> UnAuthorize(object data = null) => Response(ResponseStatusCode.Unauthorize, data);
+        public Task<Response> NotFound(object data = null) => Response(ResponseStatusCode.NotFound, data);
+        public Task<Response> BadRequest(object data = null) => Response(ResponseStatusCode.BadRequest, data);
+        public Task<Response> SessionExpired(object data = null) => Response(ResponseStatusCode.SessionExpired, data);
+        public Task<Response> Newest(object data = null) => Response(ResponseStatusCode.Newest, data);
+        public Task<Response> OutOfDate(object data = null) => Response(ResponseStatusCode.OutOfDate, data);
+        public Task<Response> Unsupport(object data = null) => Response(ResponseStatusCode.Unsupport, data);
+        public Task<Response> UnAvailable(object data = null) => Response(ResponseStatusCode.UnAvailable, data);
+        public Task<Response> Block(object data = null) => Response(ResponseStatusCode.Block, data);
+        public Task<Response> Reject(object data = null) => Response(ResponseStatusCode.Reject, data);
+        public Task<Response> SessionFull(object data = null) => Response(ResponseStatusCode.SessionFull, data);
+        public Task<Response> Conflict(object data = null) => Response(ResponseStatusCode.Conflict, data);
+        public Task<Response> Response(ResponseStatusCode reponseStatus, object data)
         {
 #if NET40
 
-            return TaskEx.FromResult(new ResponseResult(HeaderEx.BuildResponse(reponseStatus), data));
+            return TaskEx.FromResult(new Response(HeaderEx.BuildResponse(reponseStatus), data));
 #else
-            return Task.FromResult(new ResponseResult(HeaderEx.BuildResponse(reponseStatus), data));
+            return Task.FromResult(new Response(HeaderEx.BuildResponse(reponseStatus), data));
 #endif
         }
         #endregion
@@ -447,7 +447,7 @@ namespace Kzone.Signal
             }
         }
 
-        internal async Task<ResponseResult> SendAndWaitInternalAsync(Message msg, int timeoutMs, long contentLength, Stream stream)
+        internal async Task<Response> SendAndWaitInternalAsync(Message msg, int timeoutMs, long contentLength, Stream stream)
         {
             if (msg == null) throw new ArgumentNullException(nameof(msg));
 
@@ -456,13 +456,13 @@ namespace Kzone.Signal
                 throw new ArgumentException("Cannot read from supplied stream.");
             }
             await _writeLock.WaitAsync(_token).ConfigureAwait(false);
-            ResponseResult ret = null;
+            Response ret = null;
             var responsed = new AsyncAutoResetEvent(false);
             void handler(object sender, ResponseResultReceivedArgs e)
             {
                 if (e.Message.ConversationGuid == msg.ConversationGuid)
                 {
-                    ret = new ResponseResult(e.Message.Expiration, e.Message.Header, e.BytesData);
+                    ret = new Response(e.Message.Expiration, e.Message.Header, e.BytesData);
                     responsed.Set();
                 }
             }

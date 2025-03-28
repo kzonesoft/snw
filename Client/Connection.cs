@@ -190,7 +190,7 @@ namespace Kzone.Signal.Client
 
                         if (DateTime.UtcNow < expiration)
                         {
-                            var request = new RequestContext(
+                            var request = new Request(
                                 this,
                                 msg.ConversationGuid,
                                 msg.Expiration,
@@ -299,7 +299,7 @@ namespace Kzone.Signal.Client
             }
         }
 
-        private void HandleMessageAndReply(Message msg, RequestContext request)
+        private void HandleMessageAndReply(Message msg, Request request)
         {
             if (_events.OnRpcDataReceived == null) return;
 #if NET40
