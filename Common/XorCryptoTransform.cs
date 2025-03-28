@@ -1,5 +1,4 @@
-﻿
-namespace Kzone.Signal.Common
+﻿namespace Kzone.Signal.Common
 {
     using System;
     using System.Security.Cryptography;
@@ -15,17 +14,18 @@ namespace Kzone.Signal.Common
             this.key = key ?? throw new ArgumentNullException(nameof(key));
             if (key.Length == 0)
                 throw new ArgumentException("Key cannot be empty.", nameof(key));
+
+            // Validate that the key is exactly 3 bytes
+            if (key.Length != 3)
+                throw new ArgumentException("Key must be exactly 3 bytes in length.", nameof(key));
         }
 
         public bool CanReuseTransform => true;
-
         public bool CanTransformMultipleBlocks => true;
-
-        public int InputBlockSize => 1;  // Process data byte by byte (can be optimized to larger block size)
-
+        public int InputBlockSize => 1;  // Keep original value for compatibility
         public int OutputBlockSize => 1;
 
-        // Performs the XOR operation on a block of data
+        // XOR operation optimized for a fixed 3-byte key
         public int TransformBlock(byte[] inputBuffer, int inputOffset, int inputCount, byte[] outputBuffer, int outputOffset)
         {
             // Validate input parameters
@@ -36,16 +36,30 @@ namespace Kzone.Signal.Common
             if (outputOffset < 0 || outputOffset + inputCount > outputBuffer.Length)
                 throw new ArgumentOutOfRangeException(nameof(outputOffset), "Invalid output offset.");
 
-            // Perform XOR encryption/decryption
-            for (int i = 0; i < inputCount; i++)
+            // Extract key bytes for faster access
+            byte key0 = key[0], key1 = key[1], key2 = key[2];
+
+            int i = 0;
+
+            // Process in blocks of 3 bytes to match the key pattern
+            while (i + 3 <= inputCount)
             {
-                outputBuffer[outputOffset + i] = (byte)(inputBuffer[inputOffset + i] ^ key[i % key.Length]);
+                outputBuffer[outputOffset + i] = (byte)(inputBuffer[inputOffset + i] ^ key0);
+                outputBuffer[outputOffset + i + 1] = (byte)(inputBuffer[inputOffset + i + 1] ^ key1);
+                outputBuffer[outputOffset + i + 2] = (byte)(inputBuffer[inputOffset + i + 2] ^ key2);
+                i += 3;
             }
+
+            // Handle remaining bytes (if any)
+            if (i < inputCount)
+                outputBuffer[outputOffset + i] = (byte)(inputBuffer[inputOffset + i] ^ key0);
+            if (i + 1 < inputCount)
+                outputBuffer[outputOffset + i + 1] = (byte)(inputBuffer[inputOffset + i + 1] ^ key1);
 
             return inputCount;
         }
 
-        // Final block transformation (in this case, just calls TransformBlock since XOR doesn't need padding)
+        // Final block transformation
         public byte[] TransformFinalBlock(byte[] inputBuffer, int inputOffset, int inputCount)
         {
             if (inputBuffer == null) throw new ArgumentNullException(nameof(inputBuffer));
@@ -80,5 +94,4 @@ namespace Kzone.Signal.Common
             GC.SuppressFinalize(this);
         }
     }
-
 }

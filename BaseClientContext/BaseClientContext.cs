@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
 
 namespace Kzone.Signal
 {
@@ -20,12 +21,23 @@ namespace Kzone.Signal
         protected DebugLogger _debugLogger = null; //set
         protected DateTime _lastActivity = DateTime.MinValue;
 
-        private event EventHandler<ResponseResultReceivedArgs> _eventResponseReceived;
+        // Thay thế event bằng ConcurrentDictionary để quản lý các yêu cầu đang chờ
+        private ConcurrentDictionary<string, TaskCompletionSource<Response>> _pendingRequests =
+            new ConcurrentDictionary<string, TaskCompletionSource<Response>>();
 
         internal Semaphore _writeLock = new();
         internal Semaphore _readLock = new();
+
+        // Phương thức xử lý phản hồi nhận được
         internal void HandleResponseReceived(object sender, Message msg, byte[] data)
-            => _eventResponseReceived?.Invoke(sender, new ResponseResultReceivedArgs(msg, data));
+        {
+            if (msg.ConversationGuid != null &&
+                _pendingRequests.TryRemove(msg.ConversationGuid, out var tcs))
+            {
+                tcs.TrySetResult(new Response(msg.Expiration, msg.Header, data));
+            }
+        }
+
         internal abstract Task DataReceiver();
 
         internal BaseClientContext(Statistics statistics, KeepaliveSettings keepaliveSettings, DebugLogger debugLogger)
@@ -36,8 +48,116 @@ namespace Kzone.Signal
             _token = _tokenSource.Token;
         }
 
-        //
+        #region EXCEPTION HANDLING HELPERS
+
+        private bool HandleSendException(Exception ex, string methodName)
+        {
+            switch (ex)
+            {
+                case InvalidOperationException:
+                    _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + methodName + " [exception] " + nameof(ConnectionException));
+#if DEBUG
+                    throw new ConnectionException("Connection Error");
+#elif RELEASE
+                    return false;
+#endif
+                case NotSupportedException:
+                    _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + methodName + " [exception] " + nameof(NotSupportedException));
+#if DEBUG
+                    throw new NotSupportedException("This object not support in this protocol");
+#elif RELEASE
+                    return false;
+#endif
+                case NullReferenceException:
+                    _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + methodName + " [exception] " + nameof(NullReferenceException));
+#if DEBUG
+                    throw new NotSupportedException("Data is null");
+#elif RELEASE
+                    return false;
+#endif
+                default:
+                    _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + methodName + " [exception] " + nameof(Exception));
+#if DEBUG
+                    throw new Exception(ex.Message);
+#elif RELEASE
+                    return false;
+#endif
+            }
+        }
+
+        private Task<bool> HandleSendAsyncException(Exception ex, string methodName)
+        {
+            switch (ex)
+            {
+                case InvalidOperationException:
+                    _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + methodName + " [exception] " + nameof(ConnectionException));
+#if DEBUG
+                    throw new ConnectionException("Connection Error");
+#elif RELEASE
+#if NET40
+                    return TaskEx.FromResult(false);
+#else
+                    return Task.FromResult(false);
+#endif
+#endif
+                case NotSupportedException:
+                    _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + methodName + " [exception] " + nameof(NotSupportedException));
+#if DEBUG
+                    throw new NotSupportedException("This object not support in this protocol");
+#elif RELEASE
+#if NET40
+                    return TaskEx.FromResult(false);
+#else
+                    return Task.FromResult(false);
+#endif
+#endif
+                case NullReferenceException:
+                    _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + methodName + " [exception] " + nameof(NullReferenceException));
+#if DEBUG
+                    throw new NotSupportedException("Data is null");
+#elif RELEASE
+#if NET40
+                    return TaskEx.FromResult(false);
+#else
+                    return Task.FromResult(false);
+#endif
+#endif
+                default:
+                    _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + methodName + " [exception] " + nameof(Exception));
+#if DEBUG
+                    throw new Exception(ex.Message);
+#elif RELEASE
+#if NET40
+                    return TaskEx.FromResult(false);
+#else
+                    return Task.FromResult(false);
+#endif
+#endif
+            }
+        }
+
+
+
+        private ResponseStatusCode HandleRpcRequestException(Exception ex)
+        {
+            if (ex is ConnectionException)
+                return ResponseStatusCode.ConnectionError;
+            if (ex is NotSupportedException)
+                return ResponseStatusCode.Unsupport;
+            if (ex is TimeoutException)
+                return ResponseStatusCode.Timeout;
+            if (ex is NullReferenceException)
+                return ResponseStatusCode.NullValue;
+            if (ex is TaskCanceledException)
+                return ResponseStatusCode.TaskCancel;
+
+            return ResponseStatusCode.Unknown;
+        }
+
+        #endregion
+
         #region PUBLIC SYNC SEND
+
         public bool Send(Header headerPacket, object obj = null)
         {
             try
@@ -48,41 +168,9 @@ namespace Kzone.Signal
                 stream ??= new MemoryStream(new byte[0]);
                 return SendInternal(new Message(headerPacket, contentLength, stream, MessageType.BroadcastPack, default, null), contentLength, stream);
             }
-            catch (InvalidOperationException)
-            {
-                _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(Send) + " [exception] " + nameof(ConnectionException));
-#if DEBUG
-                throw new ConnectionException("Connection Error");
-#elif RELEASE
-                return false;
-#endif
-            }
-            catch (NotSupportedException)
-            {
-                _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(Send) + " [exception] " + nameof(NotSupportedException));
-#if DEBUG
-                throw new NotSupportedException("This object not support in this protocol");
-#elif RELEASE
-                return false;
-#endif
-            }
-            catch (NullReferenceException)
-            {
-                _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(Send) + " [exception] " + nameof(NullReferenceException));
-#if DEBUG
-                throw new NotSupportedException("Data is null");
-#elif RELEASE
-                return false;           
-#endif
-            }
             catch (Exception e)
             {
-                _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(Send) + " [exception] " + nameof(Exception));
-#if DEBUG
-                throw new Exception(e.Message);
-#elif RELEASE
-                return false;
-#endif
+                return HandleSendException(e, nameof(Send));
             }
         }
 
@@ -106,7 +194,8 @@ namespace Kzone.Signal
         }
         #endregion
         //
-        #region  PUBLIC PUBLIC SEND ASYNC
+
+        #region PUBLIC SEND ASYNC
         public async Task<bool> SendAsync(Header header, object obj = null)
         {
             try
@@ -118,43 +207,10 @@ namespace Kzone.Signal
                 stream ??= new MemoryStream(new byte[0]);
                 return await SendInternalAsync(new Message(header, contentLength, stream, MessageType.BroadcastPack, default, null), contentLength, stream).ConfigureAwait(false);
             }
-            catch (InvalidOperationException)
-            {
-                _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(SendAsync) + " [exception] " + nameof(ConnectionException));
-#if DEBUG
-                throw new ConnectionException("Connection Error");
-#elif RELEASE
-                return false;
-#endif
-            }
-            catch (NotSupportedException)
-            {
-                _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(SendAsync) + " [exception] " + nameof(NotSupportedException));
-#if DEBUG
-                throw new NotSupportedException("This object not support in this protocol");
-#elif RELEASE
-                return false;
-#endif
-            }
-            catch (NullReferenceException)
-            {
-                _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(SendAsync) + " [exception] " + nameof(NullReferenceException));
-#if DEBUG
-                throw new NotSupportedException("Data is null");
-#elif RELEASE
-                return false;           
-#endif
-            }
             catch (Exception e)
             {
-                _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(SendAsync) + " [exception] " + nameof(Exception));
-#if DEBUG
-                throw new Exception(e.Message);
-#elif RELEASE
-                return false;
-#endif
+                return await HandleSendAsyncException(e, nameof(SendAsync));
             }
-
         }
 
         public async Task<bool> SendStreamAsync(Header headerPacket, long contentLength, Stream stream)
@@ -177,12 +233,10 @@ namespace Kzone.Signal
         }
         #endregion
         //
-        #region PUBLIC  SEND AND WAIT RESULT
 
-
+        #region PUBLIC SEND AND WAIT RESULT
         public async Task<Response> RpcRequest(int timeoutMs, Header header, object obj = null)
         {
-
             if (header == null) throw new ArgumentNullException("header is null");
             try
             {
@@ -190,38 +244,18 @@ namespace Kzone.Signal
                 byte[] data = obj == null ? (new byte[0]) : obj.Serialize();
                 StreamCommon.BytesToStream(data, 0, out int contentLength, out Stream stream);
                 if (contentLength < 0) throw new ArgumentException("Content length must be zero or greater.");
-                if (timeoutMs < 1000) throw new ArgumentException("Timeout milliseconds must be 1000 or greater.");
                 stream ??= new MemoryStream(new byte[0]);
                 DateTime expiration = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-                return await SendAndWaitInternalAsync(new Message(header, contentLength, stream, MessageType.RequestPack, expiration, Guid.NewGuid().ToString()), timeoutMs, contentLength, stream);
-            }
-            catch (InvalidOperationException)
-            {
-                throw new ConnectionException("Connection Error");
-            }
-            catch (NotSupportedException)
-            {
-                throw new NotSupportedException("This object not support for protocol");
-            }
-            catch (NullReferenceException)
-            {
-                throw new NullReferenceException("Data is null");
-            }
-            catch (TimeoutException)
-            {
-                throw new TimeoutException("Too slow ... server not response.");
-            }
-            catch (TaskCanceledException e)
-            {
-                throw new TaskCanceledException(e.Message);
+                string conversationGuid = Guid.NewGuid().ToString();
+                return await SendAndWaitInternalAsync(new Message(header, contentLength, stream, MessageType.RequestPack, expiration, conversationGuid), timeoutMs, contentLength, stream).ConfigureAwait(false);
             }
             catch (Exception e)
             {
+                if (e is TaskCanceledException) throw new TaskCanceledException(e.Message);
                 _debugLogger.Logger?.Invoke(Severity.Debug, _header + " method " + nameof(RpcRequest) + " [exception] " + e.Message);
                 throw new Exception(e.Message);
             }
         }
-
 
         public async Task<Response<T>> RpcRequest<T>(int timeOut, Header header, object data = null)
         {
@@ -237,35 +271,10 @@ namespace Kzone.Signal
                     ? new Response<T>(replyStatus, result.Data.Deserialize<T>())
                     : new Response<T>(replyStatus, default);
             }
-            catch (ConnectionException)
+            catch (Exception e)
             {
-                return new Response<T>(ResponseStatusCode.ConnectionError, default);
+                return new Response<T>(HandleRpcRequestException(e), default);
             }
-            catch (NotSupportedException)
-            {
-                return new Response<T>(ResponseStatusCode.Unsupport, default);
-            }
-            catch (TimeoutException)
-            {
-                return new Response<T>(ResponseStatusCode.Timeout, default);
-            }
-            catch (NullReferenceException)
-            {
-                return new Response<T>(ResponseStatusCode.NullValue, default);
-            }
-            catch (TaskCanceledException e)
-            {
-                return new Response<T>(ResponseStatusCode.TaskCancel, default);
-            }
-            catch (Exception)
-            {
-                return new Response<T>(ResponseStatusCode.Unknow, default);
-            }
-        }
-
-        public async Task<Response<T>> RpcRequest<T, TEnum>(int timeOut, TEnum dataTag, object data = null) where TEnum : struct
-        {
-            return await RpcRequest<T>(timeOut, HeaderEx.BuildTag(dataTag), data).ConfigureAwait(false);
         }
 
         public async Task<ResponseStatusCode> RpcRequest<TEnum>(int timeOut, TEnum dataTag, object data = null) where TEnum : struct
@@ -275,35 +284,17 @@ namespace Kzone.Signal
                 var result = await RpcRequest(timeOut, HeaderEx.BuildTag(dataTag), data).ConfigureAwait(false);
                 return result.Header.GetStatusCode();
             }
-            catch (ConnectionException)
-            {
-                return ResponseStatusCode.ConnectionError;
-            }
-            catch (NotSupportedException)
-            {
-                return ResponseStatusCode.Unsupport;
-            }
-            catch (TimeoutException)
-            {
-                return ResponseStatusCode.Timeout;
-            }
-            catch (NullReferenceException)
-            {
-                return ResponseStatusCode.NullValue;
-            }
-            catch (TaskCanceledException e)
-            {
-                return ResponseStatusCode.TaskCancel;
-            }
             catch (Exception e)
             {
-#if DEBUG
-                Console.WriteLine($"{e.Message}{Environment.NewLine}{e.StackTrace}");
-#endif
-                return ResponseStatusCode.Unknow;
+                return HandleRpcRequestException(e);
             }
-
         }
+
+        public async Task<Response<T>> RpcRequest<T, TEnum>(int timeOut, TEnum dataTag, object data = null) where TEnum : struct
+        {
+            return await RpcRequest<T>(timeOut, HeaderEx.BuildTag(dataTag), data).ConfigureAwait(false);
+        }
+
         public async Task<Response<T>> RpcRequest<T, TEnum>(TEnum dataTag, object data = null) where TEnum : struct
         {
             return await RpcRequest<T, TEnum>(30000, dataTag, data).ConfigureAwait(false);
@@ -313,9 +304,9 @@ namespace Kzone.Signal
         {
             return await RpcRequest(30000, dataTag, data).ConfigureAwait(false);
         }
-
         #endregion
         //
+
         #region PUBLIC RESPONSE RESULT WHEN RECEIVED
         public Task<Response> Ok(object data = null) => Response(ResponseStatusCode.Ok, data);
         public Task<Response> Authorize(object data = null) => Response(ResponseStatusCode.Authorize, data);
@@ -334,7 +325,6 @@ namespace Kzone.Signal
         public Task<Response> Response(ResponseStatusCode reponseStatus, object data)
         {
 #if NET40
-
             return TaskEx.FromResult(new Response(HeaderEx.BuildResponse(reponseStatus), data));
 #else
             return Task.FromResult(new Response(HeaderEx.BuildResponse(reponseStatus), data));
@@ -342,8 +332,8 @@ namespace Kzone.Signal
         }
         #endregion
         //
-        #region INTERNAL SEND
 
+        #region INTERNAL SEND
         internal bool SendInternal(Message msg, long contentLength, Stream stream)
         {
             if (msg == null) throw new ArgumentNullException(nameof(msg));
@@ -434,12 +424,12 @@ namespace Kzone.Signal
             catch (Exception e)
             {
                 _debugLogger.Logger?.Invoke(Severity.Error,
-                    _header + "failed to write message: " +
+                    _header + "failed to write message,due to exception: " +
                     Environment.NewLine +
                     e.Message);
 
                 _debugLogger.ExceptionRecord?.Invoke(e);
-                return false;
+                throw new UnknowException(e.Message);
             }
             finally
             {
@@ -455,19 +445,21 @@ namespace Kzone.Signal
             {
                 throw new ArgumentException("Cannot read from supplied stream.");
             }
-            await _writeLock.WaitAsync(_token).ConfigureAwait(false);
-            Response ret = null;
-            var responsed = new AsyncAutoResetEvent(false);
-            void handler(object sender, ResponseResultReceivedArgs e)
+
+            string conversationId = msg.ConversationGuid;
+            if (string.IsNullOrEmpty(conversationId))
             {
-                if (e.Message.ConversationGuid == msg.ConversationGuid)
-                {
-                    ret = new Response(e.Message.Expiration, e.Message.Header, e.BytesData);
-                    responsed.Set();
-                }
+                throw new ArgumentException("Message must have a ConversationGuid");
             }
-            // Subscribe                
-            _eventResponseReceived += handler;
+
+            var tcs = new TaskCompletionSource<Response>();
+            if (!_pendingRequests.TryAdd(conversationId, tcs))
+            {
+                throw new InvalidOperationException($"A request with conversation ID {conversationId} is already pending");
+            }
+
+            await _writeLock.WaitAsync(_token).ConfigureAwait(false);
+
             try
             {
                 await SendHeadersAsync(msg, _token).ConfigureAwait(false);
@@ -478,6 +470,7 @@ namespace Kzone.Signal
             }
             catch (Exception e)
             {
+                _pendingRequests.TryRemove(conversationId, out _);
                 _debugLogger.Logger?.Invoke(Severity.Error,
                     _header + "failed to write message,due to exception: " +
                     Environment.NewLine +
@@ -490,30 +483,42 @@ namespace Kzone.Signal
             {
                 _writeLock?.Release();
             }
-            var waitResult = await responsed.WaitAsync(TimeSpan.FromMilliseconds(timeoutMs), _token).ConfigureAwait(false);
-            try
-            {
-                if (waitResult)
-                {
-                    return ret;
-                }
-                if (_token.IsCancellationRequested)
-                {
-                    _debugLogger.Logger?.Invoke(Severity.Error, _header + "Task has been canceled.");
-                    throw new TaskCanceledException("Task has been canceled.");
-                }
-                _debugLogger.Logger?.Invoke(Severity.Error, _header + "synchronous response not received within the timeout window");
-                throw new TimeoutException("A response to a synchronous request was not received within the timeout window.");
-            }
-            finally
-            {
-                // Unsubscribe  
-                _eventResponseReceived -= handler;
-            }
-        }
 
-        #endregion
+            using var cancellationTokenSource = new CancellationTokenSource();
+
+            var delayTask =
+#if NET40
+                TaskEx.Delay(timeoutMs);
+#else
+                    Task.Delay(timeoutMs);
+#endif
+            var completedTask = await
+#if NET40
+                TaskEx.WhenAny(tcs.Task, delayTask);
+#else
+                Task.WhenAny(tcs.Task, delayTask);
+#endif
+
+            if (completedTask == tcs.Task)
+            {
+                return await tcs.Task;
+            }
+
+            _pendingRequests.TryRemove(conversationId, out _);
+
+            if (_token.IsCancellationRequested)
+            {
+                _debugLogger.Logger?.Invoke(Severity.Error, _header + "Task has been canceled.");
+                throw new TaskCanceledException("Task has been canceled.");
+            }
+
+            _debugLogger.Logger?.Invoke(Severity.Error, _header + "synchronous response not received within the timeout window");
+            throw new TimeoutException("A response to a synchronous request was not received within the timeout window.");
+
+        }
+#endregion
         //
+
         #region SEND HEADER
         private void SendHeaders(Message msg)
         {
@@ -530,6 +535,7 @@ namespace Kzone.Signal
         }
         #endregion
         //
+
         #region SEND STREAM
         private void SendDataStream(long contentLength, Stream stream)
         {
@@ -570,12 +576,13 @@ namespace Kzone.Signal
                 _dataStream?.Flush();
             }
         }
+
         private async Task SendDataStreamAsync(long contentLength, Stream stream, CancellationToken token)
         {
             try
             {
                 if (contentLength <= 0) return;
-               
+
                 long bytesRemaining = contentLength;
                 int bytesRead = 0;
 
@@ -602,7 +609,6 @@ namespace Kzone.Signal
                         break; // Không còn dữ liệu để đọc
                     }
                 }
-
             }
             finally
             {
@@ -610,10 +616,9 @@ namespace Kzone.Signal
                 await _dataStream.FlushAsync(token).ConfigureAwait(false);
             }
         }
-
-
         #endregion
         //
+
         #region KEEP ALIVE
         protected void EnableKeepalives()
         {
@@ -638,8 +643,6 @@ namespace Kzone.Signal
                 Buffer.BlockCopy(BitConverter.GetBytes((uint)(_keepaliveSettings.TcpKeepAliveInterval * 1000)), 0, keepAlive, 8, 4);
                 _client.Client.IOControl(IOControlCode.KeepAliveValues, keepAlive, null);
 
-#elif NETSTANDARD
-
 #endif
             }
             catch (Exception)
@@ -648,8 +651,6 @@ namespace Kzone.Signal
                 _keepaliveSettings.EnableTcpKeepAlives = false;
             }
         }
-
-
+        #endregion
     }
-    #endregion
 }

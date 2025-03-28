@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Condition=" '$(TargetFramework)' == '' AND '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Import Project="$(NuGetPackageRoot)msbump\2.3.2\buildMultiTargeting\MSBump.targets" Condition="Exists('$(NuGetPackageRoot)msbump\2.3.2\buildMultiTargeting\MSBump.targets')" />
+  </ImportGroup>
+  <ImportGroup Condition=" '$(TargetFramework)' == 'net40' AND '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Import Project="$(NuGetPackageRoot)msbump\2.3.2\build\MSBump.targets" Condition="Exists('$(NuGetPackageRoot)msbump\2.3.2\build\MSBump.targets')" />
+  </ImportGroup>
+  <ImportGroup Condition=" '$(TargetFramework)' == 'net472' AND '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Import Project="$(NuGetPackageRoot)msbump\2.3.2\build\MSBump.targets" Condition="Exists('$(NuGetPackageRoot)msbump\2.3.2\build\MSBump.targets')" />
+  </ImportGroup>
+  <ImportGroup Condition=" '$(TargetFramework)' == 'net8.0' AND '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Import Project="$(NuGetPackageRoot)msbump\2.3.2\build\MSBump.targets" Condition="Exists('$(NuGetPackageRoot)msbump\2.3.2\build\MSBump.targets')" />
+  </ImportGroup>
+</Project>

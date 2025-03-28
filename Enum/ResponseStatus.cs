@@ -26,7 +26,7 @@ namespace Kzone.Signal
 
         IpBlocked = 108,
 
-        Unknow = 109,
+        Unknown = 109,
 
         Object_Existed = 110,
 
@@ -75,5 +75,7 @@ namespace Kzone.Signal
         Conflict = 132,
 
         TaskCancel = 133
+
+        
     }
 }
