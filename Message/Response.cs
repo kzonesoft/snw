@@ -8,27 +8,26 @@ namespace Kzone.Signal
     /// </summary>
     public class Response
     {
+        private object _baseData;
         public Header Header { get; }
-        public byte[] Data { get; }
+        public byte[] BytesData => _baseData.Serialize();
+        public object DefaultData => _baseData;
+
         internal DateTime ExpirationUtc { get; set; }
-        //received OK => reply
-        public Response(Header header, byte[] data)
-        {
-            Header = header;
-            Data = data;
-        }
+     
         public Response(Header header, object data)
         {
-            data ??= new byte[0];
+            _baseData ??= new byte[0];
             Header = header;
-            Data = data.Serialize();
+            _baseData = data;
+        
         }
         //reply => task rtcsend
         internal Response(DateTime expirationUtc, Header headerPacket, byte[] data)
         {
             ExpirationUtc = expirationUtc;
             Header = headerPacket;
-            Data = data;
+            _baseData = data;
         }
     }
     //rtcsend => result<T>

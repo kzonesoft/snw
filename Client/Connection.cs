@@ -311,7 +311,7 @@ namespace Kzone.Signal.Client
                 var response = await _events.HandleRpcReceived(request);
                 if (response != null)
                 {
-                    StreamCommon.BytesToStream(response.Data, 0, out int contentLength, out Stream stream);
+                    StreamCommon.ObjectToStream(response.DefaultData, out int contentLength, out Stream stream);
                     Message respMsg = new(
                         response.Header,
                         contentLength,

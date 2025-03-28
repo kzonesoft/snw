@@ -162,8 +162,7 @@ namespace Kzone.Signal
         {
             try
             {
-                byte[] data = obj == null ? (new byte[0]) : obj.Serialize();
-                StreamCommon.BytesToStream(data, 0, out int contentLength, out Stream stream);
+                StreamCommon.ObjectToStream(obj, out int contentLength, out Stream stream);
                 if (contentLength < 0) throw new ArgumentException("Content length must be zero or greater.");
                 stream ??= new MemoryStream(new byte[0]);
                 return SendInternal(new Message(headerPacket, contentLength, stream, MessageType.BroadcastPack, default, null), contentLength, stream);
@@ -200,9 +199,7 @@ namespace Kzone.Signal
         {
             try
             {
-                byte[] data = obj == null ? (new byte[0]) : obj.Serialize();
-                data ??= new byte[0];
-                StreamCommon.BytesToStream(data, 0, out int contentLength, out Stream stream);
+                StreamCommon.ObjectToStream(obj, out int contentLength, out Stream stream);
                 if (contentLength < 0) throw new ArgumentException("Content length must be zero or greater.");
                 stream ??= new MemoryStream(new byte[0]);
                 return await SendInternalAsync(new Message(header, contentLength, stream, MessageType.BroadcastPack, default, null), contentLength, stream).ConfigureAwait(false);
@@ -241,8 +238,7 @@ namespace Kzone.Signal
             try
             {
                 if (timeoutMs < 1000) throw new ArgumentException("Timeout milliseconds must be 1000 or greater.");
-                byte[] data = obj == null ? (new byte[0]) : obj.Serialize();
-                StreamCommon.BytesToStream(data, 0, out int contentLength, out Stream stream);
+                StreamCommon.ObjectToStream(obj, out int contentLength, out Stream stream);
                 if (contentLength < 0) throw new ArgumentException("Content length must be zero or greater.");
                 stream ??= new MemoryStream(new byte[0]);
                 DateTime expiration = DateTime.UtcNow.AddMilliseconds(timeoutMs);
@@ -268,7 +264,7 @@ namespace Kzone.Signal
                 }
                 var replyStatus = result.Header.GetStatusCode();
                 return replyStatus == ResponseStatusCode.Ok
-                    ? new Response<T>(replyStatus, result.Data.Deserialize<T>())
+                    ? new Response<T>(replyStatus, result.BytesData.Deserialize<T>())
                     : new Response<T>(replyStatus, default);
             }
             catch (Exception e)
@@ -297,12 +293,12 @@ namespace Kzone.Signal
 
         public async Task<Response<T>> RpcRequest<T, TEnum>(TEnum dataTag, object data = null) where TEnum : struct
         {
-            return await RpcRequest<T, TEnum>(30000, dataTag, data).ConfigureAwait(false);
+            return await RpcRequest<T, TEnum>(60000, dataTag, data).ConfigureAwait(false);
         }
 
         public async Task<ResponseStatusCode> RpcRequest<TEnum>(TEnum dataTag, object data = null) where TEnum : struct
         {
-            return await RpcRequest(30000, dataTag, data).ConfigureAwait(false);
+            return await RpcRequest(60000, dataTag, data).ConfigureAwait(false);
         }
         #endregion
         //
@@ -484,39 +480,44 @@ namespace Kzone.Signal
                 _writeLock?.Release();
             }
 
-            using var cancellationTokenSource = new CancellationTokenSource();
-
-            var delayTask =
+            try
+            {
+                // Sử dụng cách tạo delay task tương thích với cả .NET 4.0
 #if NET40
-                TaskEx.Delay(timeoutMs);
+                var timeoutTask = TaskEx.Delay(timeoutMs);
+                var completedTask = await TaskEx.WhenAny(tcs.Task, timeoutTask);
 #else
-                    Task.Delay(timeoutMs);
-#endif
-            var completedTask = await
-#if NET40
-                TaskEx.WhenAny(tcs.Task, delayTask);
-#else
-                Task.WhenAny(tcs.Task, delayTask);
+                var timeoutTask = Task.Delay(timeoutMs);
+                var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
 #endif
 
-            if (completedTask == tcs.Task)
-            {
-                return await tcs.Task;
+                if (completedTask == tcs.Task)
+                {
+                    return await tcs.Task;
+                }
+
+                // Xử lý timeout
+                bool removed = _pendingRequests.TryRemove(conversationId, out _);
+                _debugLogger.Logger?.Invoke(Severity.Debug,
+                    _header + $"Request {conversationId} timed out. Request removed: {removed}");
+
+                if (_token.IsCancellationRequested)
+                {
+                    _debugLogger.Logger?.Invoke(Severity.Error, _header + "Task has been canceled.");
+                    throw new TaskCanceledException("Task has been canceled.");
+                }
+
+                _debugLogger.Logger?.Invoke(Severity.Error, _header + "synchronous response not received within the timeout window");
+                throw new TimeoutException("A response to a synchronous request was not received within the timeout window.");
             }
-
-            _pendingRequests.TryRemove(conversationId, out _);
-
-            if (_token.IsCancellationRequested)
+            catch (Exception ex) when (!(ex is TimeoutException || ex is TaskCanceledException))
             {
-                _debugLogger.Logger?.Invoke(Severity.Error, _header + "Task has been canceled.");
-                throw new TaskCanceledException("Task has been canceled.");
+                _pendingRequests.TryRemove(conversationId, out _);
+                _debugLogger.Logger?.Invoke(Severity.Error, _header + $"Error waiting for response: {ex.Message}");
+                throw;
             }
-
-            _debugLogger.Logger?.Invoke(Severity.Error, _header + "synchronous response not received within the timeout window");
-            throw new TimeoutException("A response to a synchronous request was not received within the timeout window.");
-
         }
-#endregion
+        #endregion
         //
 
         #region SEND HEADER
@@ -579,43 +580,145 @@ namespace Kzone.Signal
 
         private async Task SendDataStreamAsync(long contentLength, Stream stream, CancellationToken token)
         {
+            if (contentLength <= 0)
+            {
+                return;
+            }
+
+            // Xác định quyền sở hữu stream
+            bool isExternalStream = stream != null && stream != _dataStream;
+            bool streamDisposed = false;
+
             try
             {
-                if (contentLength <= 0) return;
+                // Kiểm tra token trước khi bắt đầu công việc
+                token.ThrowIfCancellationRequested();
+
+                if (stream == null || !stream.CanRead)
+                {
+                    throw new ArgumentException("Stream không hợp lệ hoặc không thể đọc");
+                }
 
                 long bytesRemaining = contentLength;
-                int bytesRead = 0;
+                long totalBytesProcessed = 0;
+                int bytesRead;
 
-                // Tạo buffer cố định một lần với kích thước tối đa
-                byte[] buffer = new byte[_maxSendBufferLength];
+                // Tối ưu kích thước buffer dựa trên nhu cầu thực tế
+                int bufferSize = (int)Math.Min(_maxSendBufferLength, Math.Max(4096, Math.Min(contentLength, 65536)));
+                byte[] buffer = new byte[bufferSize];
+
+                // Lưu vị trí stream đầu vào để có thể reset nếu cần
+                long? initialPosition = stream.CanSeek ? (long?)stream.Position : null;
 
                 while (bytesRemaining > 0)
                 {
-                    // Nếu bytesRemaining nhỏ hơn buffer, chỉ đọc đúng số byte còn lại
-                    int bufferLength = (int)Math.Min(bytesRemaining, _maxSendBufferLength);
-
-                    // Đọc từ stream vào buffer
-                    bytesRead = await stream.ReadAsync(buffer, 0, bufferLength, token);
-                    if (bytesRead > 0)
+                    // Kiểm tra hủy bỏ
+                    if (token.IsCancellationRequested)
                     {
-                        // Ghi buffer vào _dataStream
-                        await _dataStream.WriteAsync(buffer, 0, bytesRead, token);
-
-                        // Giảm số byte còn lại
-                        bytesRemaining -= bytesRead;
+                        _debugLogger.Logger?.Invoke(Severity.Debug, _header + "Truyền dữ liệu bị hủy sau khi đã xử lý " + totalBytesProcessed + " bytes");
+                        token.ThrowIfCancellationRequested();
                     }
-                    else
+
+                    // Tính toán kích thước đọc tối ưu
+                    int readSize = (int)Math.Min(buffer.Length, bytesRemaining);
+
+                    try
                     {
-                        break; // Không còn dữ liệu để đọc
+                        bytesRead = await stream.ReadAsync(buffer, 0, readSize, token).ConfigureAwait(false);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        _debugLogger.Logger?.Invoke(Severity.Error, _header + "Stream đã bị dispose trong quá trình đọc");
+                        throw new IOException("Stream đã bị đóng trong quá trình đọc");
+                    }
+                    catch (IOException ioEx)
+                    {
+                        _debugLogger.Logger?.Invoke(Severity.Error, _header + $"Lỗi IO khi đọc từ stream: {ioEx.Message}");
+                        throw;
+                    }
+
+                    // Kiểm tra kết thúc stream sớm
+                    if (bytesRead == 0)
+                    {
+                        _debugLogger.Logger?.Invoke(Severity.Warn,
+                            _header + $"Stream kết thúc sớm sau khi đọc {totalBytesProcessed} bytes. Yêu cầu {contentLength} bytes.");
+
+                        // Nếu stream có thể seek, thử reset về vị trí ban đầu
+                        if (initialPosition.HasValue && stream.CanSeek)
+                        {
+                            _debugLogger.Logger?.Invoke(Severity.Debug, _header + "Thử reset stream về vị trí ban đầu");
+                            stream.Position = initialPosition.Value;
+                        }
+
+                        break;
+                    }
+
+                    totalBytesProcessed += bytesRead;
+                    bytesRemaining -= bytesRead;
+
+                    try
+                    {
+                        await _dataStream.WriteAsync(buffer, 0, bytesRead, token).ConfigureAwait(false);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        _debugLogger.Logger?.Invoke(Severity.Error, _header + "Stream đích đã bị dispose trong quá trình ghi");
+                        throw new IOException("Stream đích đã bị đóng trong quá trình ghi");
+                    }
+                    catch (IOException ioEx)
+                    {
+                        _debugLogger.Logger?.Invoke(Severity.Error, _header + $"Lỗi IO khi ghi vào stream đích: {ioEx.Message}");
+                        throw;
                     }
                 }
+
+                // Kiểm tra xem đã xử lý đủ dữ liệu chưa
+                if (bytesRemaining > 0 && totalBytesProcessed < contentLength)
+                {
+                    _debugLogger.Logger?.Invoke(Severity.Warn,
+                        _header + $"Không thể đọc đủ dữ liệu. Yêu cầu: {contentLength}, Đã đọc: {totalBytesProcessed}");
+                }
+
+                // Flush dữ liệu nếu cần
+                if (totalBytesProcessed > 0 && !token.IsCancellationRequested)
+                {
+                    await _dataStream.FlushAsync(token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _debugLogger.Logger?.Invoke(Severity.Info, _header + "Quá trình truyền dữ liệu bị hủy bỏ");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _debugLogger.Logger?.Invoke(Severity.Error,
+                    _header + $"Lỗi không xác định trong quá trình truyền dữ liệu: {ex.GetType().Name}: {ex.Message}");
+
+                // Ghi chi tiết stack trace cho debug
+                _debugLogger.ExceptionRecord?.Invoke(ex);
+                throw;
             }
             finally
             {
-                stream?.Dispose();
-                await _dataStream.FlushAsync(token).ConfigureAwait(false);
+                // Xử lý dọn dẹp stream đầu vào nếu cần
+                if (isExternalStream && !streamDisposed)
+                {
+                    try
+                    {
+                        streamDisposed = true;
+                        stream.Dispose();
+                    }
+                    catch (Exception disposeEx)
+                    {
+                        // Chỉ log, không throw exception từ finally
+                        _debugLogger.Logger?.Invoke(Severity.Debug,
+                            _header + $"Lỗi khi giải phóng stream: {disposeEx.Message}");
+                    }
+                }
             }
         }
+
         #endregion
         //
 

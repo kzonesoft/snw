@@ -28,6 +28,26 @@ namespace Kzone.Signal
             return stream.ToArray();
         }
 
+        public static void SerializeToStream(this object obj, Stream stream)
+        {
+            if (obj == null)
+                throw new NullReferenceException("Object is null");
+
+            var objType = obj.GetType();
+            if (objType == typeof(byte[]))
+            {
+                var data = (byte[])obj;
+                stream.Write(data, 0, data.Length);
+            }
+            else if (!ProtoBuf.Meta.RuntimeTypeModel.Default.CanSerialize(objType))
+            {
+                throw new NotSupportedException(string.Format("This {0} not support", nameof(objType)));
+            }
+            else
+            {
+                Serializer.Serialize(stream, obj);
+            }
+        }
 
         public static T Deserialize<T>(this byte[] data)
         {

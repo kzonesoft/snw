@@ -93,20 +93,25 @@ namespace Kzone.Signal
 
         internal static async Task<byte[]> ReadFromStreamAsync(Stream stream, long count, int bufferLen)
         {
-            if (count <= 0) return null;
+            if (count <= 0) return new byte[0];
             if (bufferLen <= 0) throw new ArgumentException("Buffer must be greater than zero bytes.");
-            byte[] buffer = new byte[bufferLen];
 
-            int read = 0;
-            long bytesRemaining = count;
-            using MemoryStream ms = new();
+            // Tạo MemoryStream với dung lượng đã biết trước để tránh resize
+            using MemoryStream ms = new((int)Math.Min(count, int.MaxValue));
+
             try
             {
+                // Sử dụng kích thước buffer tối ưu
+                byte[] buffer = new byte[Math.Min(bufferLen, 65536)];
+                long bytesRemaining = count;
+                int read;
+
                 while (bytesRemaining > 0)
                 {
-                    if (bufferLen > bytesRemaining) buffer = new byte[bytesRemaining];
+                    // Điều chỉnh kích thước đọc dựa trên số byte còn lại
+                    int bytesToRead = (int)Math.Min(bytesRemaining, buffer.Length);
 
-                    read = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    read = await stream.ReadAsync(buffer, 0, bytesToRead).ConfigureAwait(false);
                     if (read > 0)
                     {
                         await ms.WriteAsync(buffer, 0, read).ConfigureAwait(false);
@@ -114,18 +119,22 @@ namespace Kzone.Signal
                     }
                     else
                     {
-                        throw new IOException("Could not read from supplied stream.");
+                        // Stream đã kết thúc sớm hơn dự kiến
+                        throw new IOException("Could not read from supplied stream. Stream ended unexpectedly.");
                     }
                 }
             }
-            catch
+            catch (Exception ex) when (!(ex is IOException))
             {
-                // có thể xuất hiện ngoại lệ nếu ngắt kết nối đột ngột
-                // hoặc có thể xuất hiện ngay sau khi send
+                // Log lỗi cụ thể nhưng cho phép các ngoại lệ ngắt kết nối bị bắt ở cấp cao hơn
+                throw new IOException($"Error reading from stream: {ex.Message}", ex);
             }
+
             ms.Seek(0, SeekOrigin.Begin);
             return ms.ToArray();
         }
+
+
         internal static async Task<byte[]> ReadMessageDataAsync(Message msg, int bufferLen)
         {
             if (msg == null) throw new ArgumentNullException(nameof(msg));
@@ -160,6 +169,36 @@ namespace Kzone.Signal
             foreach (byte b in data) hex.AppendFormat("{0:x2}", b);
             return hex.ToString();
         }
+
+        internal static void ObjectToStream(object obj, out int contentLength, out Stream stream)
+        {
+            contentLength = 0;
+            stream = new MemoryStream();
+
+            if (obj == null)
+            {
+                // Nếu object là null, trả về MemoryStream rỗng.
+                return;
+            }
+
+            try
+            {
+                // Sử dụng hàm SerializeToStream để ghi trực tiếp vào stream
+                obj.SerializeToStream(stream);
+
+                // Cập nhật contentLength và reset vị trí stream
+                contentLength = (int)stream.Length;
+                stream.Seek(0, SeekOrigin.Begin);
+            }
+            catch (Exception ex)
+            {
+                // Đảm bảo stream rỗng trong trường hợp lỗi
+                stream = new MemoryStream();
+                contentLength = 0;
+                throw new InvalidOperationException("Failed to serialize object", ex);
+            }
+        }
+
         internal static void BytesToStream(byte[] data, int start, out int contentLength, out Stream stream)
         {
             contentLength = 0;
@@ -180,6 +219,9 @@ namespace Kzone.Signal
                 stream.Seek(0, SeekOrigin.Begin);
             }
         }
+
+       
+
         //internal static void BytesToStream(byte[] data, int start, out int contentLength, out Stream stream)
         //{
         //    contentLength = 0;
