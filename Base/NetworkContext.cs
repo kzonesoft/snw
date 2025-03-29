@@ -5,9 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 
-namespace Kzone.Signal
+namespace Kzone.Signal.Base
 {
-    internal abstract class BaseClientContext : IBaseClientContext
+    internal abstract class NetworkContext : INetworkContext
     {
         protected string _header = "[BaseClient] ";
         protected int _maxSendBufferLength = 65536;
@@ -40,7 +40,7 @@ namespace Kzone.Signal
 
         internal abstract Task DataReceiver();
 
-        internal BaseClientContext(Statistics statistics, KeepaliveSettings keepaliveSettings, DebugLogger debugLogger)
+        internal NetworkContext(Statistics statistics, KeepaliveSettings keepaliveSettings, DebugLogger debugLogger)
         {
             _statistics = statistics;
             _keepaliveSettings = keepaliveSettings;
@@ -49,6 +49,8 @@ namespace Kzone.Signal
         }
 
         #region EXCEPTION HANDLING HELPERS
+      
+
 
         private bool HandleSendException(Exception ex, string methodName)
         {
@@ -298,7 +300,7 @@ namespace Kzone.Signal
 
         public async Task<ResponseStatusCode> RpcRequest<TEnum>(TEnum dataTag, object data = null) where TEnum : struct
         {
-            return await RpcRequest(60000, dataTag, data).ConfigureAwait(false);
+            return await RpcRequest(30000, dataTag, data).ConfigureAwait(false);
         }
         #endregion
         //
@@ -318,6 +320,8 @@ namespace Kzone.Signal
         public Task<Response> Reject(object data = null) => Response(ResponseStatusCode.Reject, data);
         public Task<Response> SessionFull(object data = null) => Response(ResponseStatusCode.SessionFull, data);
         public Task<Response> Conflict(object data = null) => Response(ResponseStatusCode.Conflict, data);
+        public Task<Response> ErrorOccured(object data = null) => Response(ResponseStatusCode.ErrorOccured,data);
+       
         public Task<Response> Response(ResponseStatusCode reponseStatus, object data)
         {
 #if NET40
@@ -608,7 +612,7 @@ namespace Kzone.Signal
                 byte[] buffer = new byte[bufferSize];
 
                 // Lưu vị trí stream đầu vào để có thể reset nếu cần
-                long? initialPosition = stream.CanSeek ? (long?)stream.Position : null;
+                long? initialPosition = stream.CanSeek ? stream.Position : null;
 
                 while (bytesRemaining > 0)
                 {
@@ -722,29 +726,60 @@ namespace Kzone.Signal
         #endregion
         //
 
-        #region KEEP ALIVE
+        #region protected method
+
+        protected bool IsConnectionAlive()
+        {
+            // Kiểm tra nhanh các điều kiện cơ bản
+            if (_client == null || _client.Client == null || _dataStream == null || !_client.Client.Connected)
+                return false;
+
+            _writeLock.Wait();
+            try
+            {
+                // Kiểm tra trạng thái lỗi của socket
+                if (_client.Client.Poll(0, SelectMode.SelectError))
+                    return false;
+
+                // Kiểm tra khả năng đọc để phát hiện dữ liệu hoặc kết nối đóng
+                if (_client.Client.Poll(0, SelectMode.SelectRead))
+                {
+                    byte[] buffer = new byte[1];
+                    int bytesRead = _client.Client.Receive(buffer, 0, 1, SocketFlags.Peek);
+                    return bytesRead != 0; // 0 byte nghĩa là kết nối đã đóng
+                }
+
+                // Không có lỗi, không có dữ liệu để đọc, kết nối vẫn mở
+                return true;
+            }
+            catch (Exception)
+            {
+                return false; // Bất kỳ lỗi nào cũng coi như kết nối không còn
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
         protected void EnableKeepalives()
         {
             try
             {
-#if NETCOREAPP3_1_OR_GREATER || NET6_0_OR_GREATER
 
-                // NETCOREAPP3_1_OR_GREATER catches .NET 5.0
 
-                _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-                _client.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, _keepaliveSettings.TcpKeepAliveTime);
-                _client.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, _keepaliveSettings.TcpKeepAliveInterval);
-                _client.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, _keepaliveSettings.TcpKeepAliveRetryCount);
-
-#elif NETFRAMEWORK
-
-                // .NET Framework expects values in milliseconds
+#if NETFRAMEWORK
 
                 byte[] keepAlive = new byte[12];
                 Buffer.BlockCopy(BitConverter.GetBytes((uint)1), 0, keepAlive, 0, 4);
                 Buffer.BlockCopy(BitConverter.GetBytes((uint)(_keepaliveSettings.TcpKeepAliveTime * 1000)), 0, keepAlive, 4, 4);
                 Buffer.BlockCopy(BitConverter.GetBytes((uint)(_keepaliveSettings.TcpKeepAliveInterval * 1000)), 0, keepAlive, 8, 4);
                 _client.Client.IOControl(IOControlCode.KeepAliveValues, keepAlive, null);
+#else
+                _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+                _client.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, _keepaliveSettings.TcpKeepAliveTime);
+                _client.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, _keepaliveSettings.TcpKeepAliveInterval);
+                _client.Client.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, _keepaliveSettings.TcpKeepAliveRetryCount);
 
 #endif
             }
@@ -754,6 +789,8 @@ namespace Kzone.Signal
                 _keepaliveSettings.EnableTcpKeepAlives = false;
             }
         }
+
+     
         #endregion
     }
 }

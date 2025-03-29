@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Kzone.Signal.Base;
+using System;
 
 namespace Kzone.Signal.Server
 {

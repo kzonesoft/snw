@@ -2,14 +2,14 @@
 using System.IO;
 using System.Threading.Tasks;
 
-namespace Kzone.Signal
+namespace Kzone.Signal.Base
 {
     public class BaseEvent
     {
         public event EventHandler<BroadcastDataArgs> OnBroadcastData;
 
         public event EventHandler<StreamReceivedArgs> OnStreamReceived;
-        public Func<Request, Task<Response>> OnRpcDataReceived { get; set; } = null;
+        public Func<Request, Task<Response>> OnRpcRequestData { get; set; } = null;
 
         internal void HandleDataReceived(object sender, Header headerPacket, byte[] data)
         {
@@ -23,11 +23,11 @@ namespace Kzone.Signal
 
         internal Task<Response> HandleRpcReceived(Request req)
         {
-            if (OnRpcDataReceived != null)
+            if (OnRpcRequestData != null)
             {
                 try
                 {
-                    return OnRpcDataReceived(req);
+                    return OnRpcRequestData(req);
                 }
                 catch (Exception) { return default; }
             }

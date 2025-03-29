@@ -1,6 +1,8 @@
 ﻿#if NET40
+
 using Kzone.Signal.Extensions;
 #endif
+using Kzone.Signal.Base;
 using System;
 using System.IO;
 using System.Linq;
@@ -12,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace Kzone.Signal.Client
 {
-    internal class Connection : BaseClientContext, IDisposable, IConnection
+    internal class Connection : NetworkContext, IDisposable, IConnection
     {
 
         private string _sourceIp = null;
@@ -20,7 +22,7 @@ namespace Kzone.Signal.Client
         private string _serverIp = null;
         private int _serverPort = 0;
         private bool _isTimeout = false;
-
+        private bool _connected = false;
         private Settings _settings = null;
         private Events _events = null;
         private NetworkStream _tcpStream = null;
@@ -39,11 +41,15 @@ namespace Kzone.Signal.Client
         }
 
         public string Host => _serverIp;
-        public bool Connected { get; protected set; }
+
+        public bool IsConnected()
+        {
+            return _connected && IsConnectionAlive();
+        }
 
         public void Connect()
         {
-            if (Connected) throw new InvalidOperationException("Already connected to the server.");
+            if (_connected) throw new InvalidOperationException("Already connected to the server.");
 
             if (_settings.LocalPort == 0)
             {
@@ -89,7 +95,7 @@ namespace Kzone.Signal.Client
 
                 if (_keepaliveSettings.EnableTcpKeepAlives) EnableKeepalives();
 
-                Connected = true;
+                _connected = true;
             }
             catch (Exception e)
             {
@@ -120,7 +126,7 @@ namespace Kzone.Signal.Client
             {
                 try
                 {
-                    if (_client == null || !_client.Connected)
+                    if (_client == null || !IsConnectionAlive() )
                     {
                         _debugLogger.Logger?.Invoke(Severity.Debug, _header + "disconnect detected");
                         break;
@@ -198,7 +204,7 @@ namespace Kzone.Signal.Client
                                 msgData);
 
                             //sau khi nhận được message thì sẽ giao cho 1 task khác thực hiện, ko block quá trình đọc stream
-                            HandleMessageAndReply(msg, request);
+                            await HandleRpcRequest(msg, request).ConfigureAwait(false);
                         }
                         else
                         {
@@ -285,7 +291,7 @@ namespace Kzone.Signal.Client
 
             try
             {
-                Connected = false;
+                _connected = false;
 
                 if (_isTimeout) reason = DisconnectReason.Timeout;
 
@@ -299,31 +305,25 @@ namespace Kzone.Signal.Client
             }
         }
 
-        private void HandleMessageAndReply(Message msg, Request request)
+        private async Task HandleRpcRequest(Message msg, Request request)
         {
-            if (_events.OnRpcDataReceived == null) return;
-#if NET40
-            Task unawait = TaskEx.Run(async () =>
-#else
-            Task unawait = Task.Run(async () =>
-#endif
-            {
-                var response = await _events.HandleRpcReceived(request);
-                if (response != null)
-                {
-                    StreamCommon.ObjectToStream(response.DefaultData, out int contentLength, out Stream stream);
-                    Message respMsg = new(
-                        response.Header,
-                        contentLength,
-                        stream,
-                        MessageType.ResponsePack,
-                        msg.Expiration,
-                        msg.ConversationGuid);
-                    await SendInternalAsync(respMsg, contentLength, stream).ConfigureAwait(false);
-                }
-            }, base._token);
+            if (_events.OnRpcRequestData == null) return;
+
+            var response = await _events.HandleRpcReceived(request);
+            if (response == null) return;
+
+            StreamCommon.ObjectToStream(response.DefaultData, out int contentLength, out Stream stream);
+            Message respMsg = new(
+                response.Header,
+                contentLength,
+                stream,
+                MessageType.ResponsePack,
+                msg.Expiration,
+                msg.ConversationGuid);
+            await SendInternalAsync(respMsg, contentLength, stream).ConfigureAwait(false);
 
         }
+
         public void Dispose()
         {
             Dispose(true);
@@ -356,7 +356,7 @@ namespace Kzone.Signal.Client
             if (disposing)
             {
                 _debugLogger.Logger?.Invoke(Severity.Info, _header + "disposing");
-                if (Connected) Disconnect();
+                if (IsConnected()) Disconnect();
 
 #if NET40
                 if (_writeLock != null)
@@ -395,11 +395,11 @@ namespace Kzone.Signal.Client
 
         public void Disconnect(bool sendNotice = true)
         {
-            if (!Connected) throw new InvalidOperationException("Not connected to the server.");
+            if (!_connected) throw new InvalidOperationException("Not connected to the server.");
 
             _debugLogger.Logger?.Invoke(Severity.Info, _header + "disconnecting from " + _serverIp + ":" + _serverPort);
 
-            if (Connected && sendNotice)
+            if (_connected && sendNotice)
             {
                 Message msg = new()
                 {
@@ -416,7 +416,7 @@ namespace Kzone.Signal.Client
             _client?.Close();
             _client?.Dispose();
 
-            Connected = false;
+            _connected = false;
 
             _debugLogger.Logger?.Invoke(Severity.Info, _header + "disconnected from " + _serverIp + ":" + _serverPort);
         }

@@ -1,10 +1,9 @@
 ﻿#if NET40
 using Kzone.Signal.Extensions;
-
-
 #endif
 
 
+using Kzone.Signal.Base;
 using System;
 using System.IO;
 using System.Linq;
@@ -14,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace Kzone.Signal.Server
 {
-    internal class Client : BaseClientContext, IDisposable, IClient
+    internal class Client : NetworkContext, IDisposable, IClient
     {
         private NetworkStream _networkStream = null;
         private Guid _clientId;
@@ -90,6 +89,12 @@ namespace Kzone.Signal.Server
             if (settings.Keepalive.EnableTcpKeepAlives) EnableKeepalives();
         }
 
+
+        /// <summary>
+        /// Kiểm tra xem kết nối TCP còn hoạt động hay không.
+        /// </summary>
+        /// <returns>True nếu kết nối còn hoạt động, ngược lại là false.</returns>
+        public bool IsConnected() => IsConnectionAlive();
         public double CalculatorLastActivity()
         {
             return (DateTime.UtcNow - _lastActivity).TotalSeconds;
@@ -240,7 +245,7 @@ namespace Kzone.Signal.Server
                         {
                             Request request = new(this, msg.ConversationGuid, msg.Expiration, msg.Header, msgData);
 
-                            await HandleMessageAndReply(msg, request).ConfigureAwait(false);
+                            await HandleRpcRequest(msg, request).ConfigureAwait(false);
                         }
                         else
                         {
@@ -373,70 +378,12 @@ namespace Kzone.Signal.Server
 
         #endregion
 
-        public bool IsConnected()
+     
+       
+
+        private async Task HandleRpcRequest(Message msg, Request request)
         {
-            if (_client == null || !_client.Connected || _dataStream == null)
-            { 
-                return false;
-            }
-            byte[] tmp = new byte[1];
-            bool success = false;
-
-            try
-            {
-                _writeLock.Wait();
-                _client.Client.Send(tmp, 0, 0);
-                success = true;
-            }
-            catch (SocketException se)
-            {
-                if (se.NativeErrorCode.Equals(10035)) success = true;
-            }
-            catch (Exception)
-            {
-            }
-            finally
-            {
-                _writeLock?.Release();
-            }
-
-            if (success) return true;
-
-            try
-            {
-                _writeLock.Wait();
-
-                if (_client.Client.Poll(0, SelectMode.SelectWrite)
-                    && !_client.Client.Poll(0, SelectMode.SelectError))
-                {
-                    byte[] buffer = new byte[1];
-                    if (_client.Client.Receive(buffer, SocketFlags.Peek) == 0)
-                    {
-                        return false;
-                    }
-                    else
-                    {
-                        return true;
-                    }
-                }
-                else
-                {
-                    return false;
-                }
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-            finally
-            {
-                _writeLock?.Release();
-            }
-        }
-
-        private async Task HandleMessageAndReply(Message msg, Request request)
-        {
-            if (_events.OnRpcDataReceived == null) return;
+            if (_events.OnRpcRequestData == null) return;
 
             var response = await _events.HandleRpcReceived(request);
             if (response == null) return;
@@ -451,29 +398,6 @@ namespace Kzone.Signal.Server
                 msg.ConversationGuid);
             await SendInternalAsync(respMsg, contentLength, stream).ConfigureAwait(false);
 
-            //#if NET40
-            //            Task unawaited = TaskEx.Run(async () =>
-            //            {
-            //#else
-            //            Task unawaited = Task.Run(async () =>
-            //                        {       
-            //#endif
-            //                var response = await _events.HandleRpcReceived(request);
-            //                if (response != null)
-            //                {
-            //                    StreamCommon.BytesToStream(response.Data, 0, out int contentLength, out Stream stream);
-            //                    Message respMsg = new(
-            //                        response.Header,
-            //                        contentLength,
-            //                        stream,
-            //                        MessageType.ResponsePack,
-            //                        msg.Expiration,
-            //                        msg.ConversationGuid);
-            //                    await SendInternalAsync(respMsg, contentLength, stream).ConfigureAwait(false);
-            //                }
-            //            }, _token);
-
-            //        }
         }
     }
 }

@@ -1,11 +1,12 @@
-﻿using System;
+﻿using Kzone.Signal.Base;
+using System;
 
 namespace Kzone.Signal.Client
 {
-    public interface IConnection : IBaseClientContext, IDisposable
+    public interface IConnection : INetworkContext, IDisposable
     {
         string Host { get; }
-        bool Connected { get; }
+        bool IsConnected();
         void Connect();
         void Disconnect(bool sendNotice = true);
     }

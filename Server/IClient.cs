@@ -1,8 +1,9 @@
-﻿using System;
+﻿using Kzone.Signal.Base;
+using System;
 
 namespace Kzone.Signal.Server
 {
-    public interface IClient : IBaseClientContext
+    public interface IClient : INetworkContext
     {
         Guid Id { get; }
         string IpPort { get; }

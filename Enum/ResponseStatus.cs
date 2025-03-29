@@ -74,8 +74,8 @@ namespace Kzone.Signal
 
         Conflict = 132,
 
-        TaskCancel = 133
+        TaskCancel = 133,
 
-        
+        ErrorOccured = 134
     }
 }

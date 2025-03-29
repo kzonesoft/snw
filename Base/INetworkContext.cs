@@ -1,9 +1,9 @@
 ﻿using System.IO;
 using System.Threading.Tasks;
 
-namespace Kzone.Signal
+namespace Kzone.Signal.Base
 {
-    public interface IBaseClientContext
+    public interface INetworkContext
     {
         bool Send(Header headerPacket, object obj = null);
         bool SendStream(Header headerPacket, Stream stream, long contentLength);
@@ -28,6 +28,7 @@ namespace Kzone.Signal
         Task<Response> Unsupport(object data = null);
         Task<Response> Reject(object data = null);
         Task<Response> SessionFull(object data = null);
+        Task<Response> ErrorOccured(object data = null);
         Task<Response> Response(ResponseStatusCode reponseStatus, object data);
         Task<Response> Conflict(object data = null);
     }
