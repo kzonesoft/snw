@@ -1,23 +1,18 @@
 ﻿<!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KZONE - Thông tin phần cứng</title>
-    <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="assets/css/hwinfo.css">
-    <script src="assets/js/hwinfo.js"></script>
-    <script>
-        // Khởi động tự động cập nhật khi trang được tải
-        document.addEventListener('DOMContentLoaded', function() {
-            startAutoUpdate();
-        });
-    </script>
+    <!-- Sử dụng font awesome giống như các trang khác -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="content-wrapper">
         <div class="header-card">
-            <h1>THÔNG TIN PHẦN CỨNG MÁY TRẠM</h1>
+            <h1>THÔNG TIN PHẦN CỨNG</h1>
             <div class="client-card">
                 <div class="client-card-content">
                     <span class="card-title">CLIENT</span>
@@ -33,13 +28,14 @@
                     <th>GPU</th>
                     <th>MAINBOARD</th>
                     <th>LAN</th>
-                    <th>RAM</th>
-                    <th>ẢO HÓA</th>
+                    <th>RAM TOTAL</th>
+                    <th>VIRTUALIZATION</th>
                     <th>MAC</th>
                 </tr>
             </thead>
             <tbody id="data-body"></tbody>
         </table>
     </div>
+    <script src="assets/js/hwinfo.js"></script>
 </body>
 </html>
