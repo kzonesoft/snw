@@ -1,0 +1,45 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KZONE - Thông tin phần cứng</title>
+    <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico">
+    <link rel="stylesheet" href="assets/css/hwinfo.css">
+    <script src="assets/js/hwinfo.js"></script>
+    <script>
+        // Khởi động tự động cập nhật khi trang được tải
+        document.addEventListener('DOMContentLoaded', function() {
+            startAutoUpdate();
+        });
+    </script>
+</head>
+<body>
+    <div class="content-wrapper">
+        <div class="header-card">
+            <h1>THÔNG TIN PHẦN CỨNG MÁY TRẠM</h1>
+            <div class="client-card">
+                <div class="client-card-content">
+                    <span class="card-title">CLIENT</span>
+                    <span id="total-clients" class="card-value">0</span>
+                </div>
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>MÁY</th>
+                    <th>CPU</th>
+                    <th>GPU</th>
+                    <th>MAINBOARD</th>
+                    <th>LAN</th>
+                    <th>RAM</th>
+                    <th>ẢO HÓA</th>
+                    <th>MAC</th>
+                </tr>
+            </thead>
+            <tbody id="data-body"></tbody>
+        </table>
+    </div>
+</body>
+</html>
