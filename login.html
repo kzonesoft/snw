@@ -1,0 +1,31 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico">
+    <link rel="stylesheet" href="assets/css/login.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Left Section -->
+        <div class="left-section">
+            <h1>K Z O N E</h1>
+            <p>VIEW CONTROL</p>
+        </div>
+
+        <!-- Right Section -->
+        <div class="right-section">
+            <img src="assets/img/logo.png" alt="Logo" class="logo">
+            <form onsubmit="handleFormSubmit(event)">
+                <input type="password" id="password" placeholder="Nhập mật khẩu" required>
+                <button type="button" onclick="login()">Đăng nhập</button>
+            </form>
+            <p id="message" class="message"></p>
+        </div>
+    </div>
+
+    <script src="assets/js/login.js"></script>
+</body>
+</html>

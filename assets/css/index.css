@@ -1,0 +1,198 @@
+﻿/* General Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+body {
+    display: flex;
+    height: 100vh;
+    background: #f9fafc;
+    color: #333;
+    flex-direction: row; /* Sidebar và content nằm ngang */
+}
+
+/* Sidebar Styling */
+.sidebar {
+    width: 210px; /* Chiều rộng sidebar */
+    background: linear-gradient(145deg, #2d3748, #434c5e);
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 15px;
+    box-shadow: 4px 0 10px rgba(0, 0, 0, 0.15);
+    position: fixed; /* Cố định vị trí */
+    height: 100vh; /* Chiều cao toàn màn hình */
+    top: 0; /* Căn trên */
+    left: 0; /* Căn trái */
+    z-index: 1000; /* Luôn nằm trên content */
+}
+
+.sidebar .logo {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: #ffffff;
+    letter-spacing: 2px;
+}
+
+.sidebar .logo span {
+    color: #48bb78; /* Màu chữ K trong logo */
+}
+
+.divider {
+    margin: 0px 0 15px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.menu {
+    list-style: none;
+    margin-top: 30px;
+}
+
+.menu-item {
+    margin-bottom: 20px;
+}
+
+.menu-item > label {
+    display: flex;
+    align-items: center;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #f7fafc;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: default;
+    position: relative;
+}
+
+.menu-item > label i {
+    margin-right: 10px;
+    font-size: 1.3rem;
+    color: #48bb78;
+}
+
+.submenu {
+    list-style: none;
+    margin-top: 3px;
+    margin-left: 15px;
+}
+
+.submenu-item {
+    margin-bottom: 2px;
+}
+
+.submenu-item > a {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: #e2e8f0;
+    text-decoration: none;
+    padding: 8px 10px;
+    border-radius: 6px;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+/* Sub-item hover effect */
+.submenu-item > a:hover {
+    background-color: #4a5568;
+    color: #ffffff;
+}
+
+/* Selected sub-item styling */
+.submenu-item > a.selected {
+    background-color: #4a5568;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+/* Content Styling */
+.content {
+    margin-left: 210px; /* Đảm bảo không đè lên sidebar */
+    padding: 8px; /* Khoảng cách nội dung */
+    background: #f9fafc; /* Màu nền trắng nhạt */
+    overflow-y: auto; /* Cho phép cuộn nếu nội dung lớn */
+    min-height: 100vh; /* Đảm bảo chiều cao tối thiểu */
+    flex-grow: 1; /* Phần content lấp đầy không gian trống */
+    width: calc(100% - 210px); /* Chiều rộng tự động điều chỉnh */
+    box-sizing: border-box; /* Tính toán kích thước đúng */
+}
+
+.content h1 {
+    font-size: 2.5rem;
+    color: #2d3748;
+    margin-bottom: 20px;
+}
+
+.content p {
+    font-size: 1rem;
+    color: #4a5568;
+    line-height: 1.6;
+}
+
+/* Logout Button Styling */
+.logout {
+    margin-top: auto; /* Đưa nút xuống cuối sidebar */
+    text-align: left;
+    padding: 20px 0;
+}
+
+.logout button {
+    background: transparent;
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s;
+}
+
+.logout button:hover {
+    background: #4a5568;
+    transform: scale(1.05);
+}
+
+.logout button i {
+    margin-right: 8px;
+}
+
+/* Responsive Design */
+@media screen and (max-width: 768px) {
+    .sidebar {
+        width: 200px; /* Sidebar hẹp hơn trên màn hình nhỏ */
+    }
+
+    .content {
+        margin-left: 200px; /* Căn chỉnh lại content */
+        width: calc(100% - 200px); /* Điều chỉnh chiều rộng */
+    }
+}
+
+@media screen and (max-width: 480px) {
+    body {
+        flex-direction: column; /* Sidebar sẽ nằm trên cùng */
+    }
+
+    .sidebar {
+        width: 100%; /* Full chiều rộng */
+        height: auto; /* Chiều cao tự động */
+        flex-direction: row; /* Hiển thị ngang */
+        padding: 10px 0;
+        overflow-x: auto; /* Cuộn ngang nếu quá nhiều mục */
+    }
+
+    .menu-item {
+        margin-bottom: 0;
+        margin-right: 15px;
+    }
+
+    .content {
+        margin-left: 0; /* Không bị ảnh hưởng bởi sidebar */
+        width: 100%; /* Full chiều rộng */
+    }
+}

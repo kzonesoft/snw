@@ -1,0 +1,50 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KZONE View</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/index.css">
+
+    <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo"><span>K</span> Z O N E</div>
+        <div class="divider"></div>
+        <ul class="menu">
+            <li class="menu-item">
+                <label><i class="fas fa-desktop"></i> Máy trạm</label>
+                <ul class="submenu">
+                    <li class="submenu-item"><a href="#" data-page="/wks" class="selected">Hoạt động</a></li>
+                    <li class="submenu-item"><a href="#">Phần cứng</a></li>
+                </ul>
+            </li>
+            <li class="menu-item">
+                <label><i class="fas fa-server"></i> Máy chủ</label>
+                <ul class="submenu">
+                    <li class="submenu-item"><a href="#">Thông tin</a></li>
+                    <li class="submenu-item"><a href="#">Tắt/Khởi động lại</a></li>
+                </ul>
+            </li>
+            <li class="menu-item">
+                <label><i class="fas fa-gamepad"></i> Games</label>
+                <ul class="submenu">
+                    <li class="submenu-item"><a href="#">Đã tải</a></li>
+                    <li class="submenu-item"><a href="#">Đang tải</a></li>
+                </ul>
+            </li>
+        </ul>
+        <!-- Logout button -->
+        <div class="logout">
+            <button id="logout-button"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+    </div>
+    <div class="content" id="main-content">
+
+    </div>
+    <script src="assets/js/index.js"></script>
+</body>
+</html>
