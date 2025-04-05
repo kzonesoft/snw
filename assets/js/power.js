@@ -70,15 +70,16 @@
 
             const data = await response.json();
 
+            // Trong hàm sendPowerAction, phần xử lý phản hồi thành công
             if (data.success) {
                 // Nếu yêu cầu thành công
                 closeModal();
 
                 // Hiển thị thông báo thành công
                 if (currentAction === 'shutdown') {
-                    alert('Máy chủ sẽ tắt trong giây lát!');
+                    window.alert('Máy chủ sẽ tắt trong giây lát!');
                 } else if (currentAction === 'restart') {
-                    alert('Máy chủ sẽ khởi động lại trong giây lát!');
+                    window.alert('Máy chủ sẽ khởi động lại trong giây lát!');
                 }
 
                 // Nếu server trả về token mới, cập nhật token
