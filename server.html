@@ -1,0 +1,50 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="assets/css/server.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="content-wrapper">
+        <div class="header-card">
+            <h1>THÔNG TIN MÁY CHỦ</h1>
+            <!-- Nút refresh sẽ được thêm vào bởi JavaScript -->
+        </div>
+
+        <div class="charts-container">
+            <!-- CPU Chart -->
+            <div class="chart-card">
+                <div class="chart-title">CPU</div>
+                <div class="chart-content">
+                    <canvas id="cpuChart"></canvas>
+                    <div class="chart-percentage" id="cpuPercentage">0%</div>
+                </div>
+            </div>
+
+            <!-- RAM Chart -->
+            <div class="chart-card">
+                <div class="chart-title">RAM</div>
+                <div class="chart-content">
+                    <canvas id="ramChart"></canvas>
+                    <div class="chart-percentage" id="ramPercentage">0%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="disk-container">
+            <div class="disk-header">
+                <h2>THÔNG TIN Ổ ĐĨA</h2>
+            </div>
+            <div class="disk-list" id="diskList">
+                <!-- Disk items will be added here by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script src="assets/js/server.js"></script>
+</body>
+</html>
