@@ -5,6 +5,116 @@
     let currentPage = null; // Biến lưu trữ trang hiện tại đang hiển thị
     let activeUpdateFunction = null; // Lưu trữ hàm cập nhật đang hoạt động
 
+    // Tính toán lại kích thước cho content margin
+    function adjustContentMargin() {
+        if (window.innerWidth <= 767) {
+            const sidebarHeight = Math.min(
+                document.querySelector('.sidebar').scrollHeight,
+                window.innerHeight * 0.5
+            );
+            document.querySelector('.content').style.marginTop = (sidebarHeight + 10) + 'px';
+            console.log('Adjusted content margin to:', (sidebarHeight + 10) + 'px');
+        } else {
+            document.querySelector('.content').style.marginTop = '0';
+        }
+    }
+
+    // Xử lý hiển thị submenu trên mobile
+    function setupMobileMenu() {
+        if (window.innerWidth > 767) return; // Chỉ áp dụng cho mobile
+
+        // Xóa các event listener cũ
+        document.querySelectorAll('.menu-item > label').forEach(label => {
+            const clone = label.cloneNode(true);
+            label.parentNode.replaceChild(clone, label);
+        });
+
+        // Thêm event listener mới
+        document.querySelectorAll('.menu-item > label').forEach(label => {
+            label.addEventListener('click', function (e) {
+                console.log('Menu label clicked');
+                e.preventDefault();
+                e.stopPropagation();
+
+                const menuItem = this.parentNode;
+                const isOpen = menuItem.classList.contains('open');
+
+                // Đóng tất cả các menu khác
+                document.querySelectorAll('.menu-item').forEach(item => {
+                    if (item !== menuItem) {
+                        item.classList.remove('open');
+                    }
+                });
+
+                // Mở/đóng menu hiện tại
+                menuItem.classList.toggle('open');
+
+                // Cuộn để đảm bảo submenu hiển thị đầy đủ
+                if (menuItem.classList.contains('open')) {
+                    setTimeout(() => {
+                        const submenu = menuItem.querySelector('.submenu');
+                        const menuRect = menuItem.getBoundingClientRect();
+
+                        // Kiểm tra xem submenu có bị che khuất không
+                        if (menuRect.bottom + submenu.scrollHeight > window.innerHeight) {
+                            menuItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }, 100);
+                }
+
+                // Tính lại margin cho content
+                setTimeout(adjustContentMargin, 150);
+            });
+        });
+
+        // Xử lý click trên submenu item để đóng menu sau khi chọn
+        document.querySelectorAll('.submenu-item > a').forEach(item => {
+            item.addEventListener('click', function () {
+                // Đóng tất cả menu sau khi chọn
+                setTimeout(() => {
+                    document.querySelectorAll('.menu-item').forEach(menuItem => {
+                        menuItem.classList.remove('open');
+                    });
+                    adjustContentMargin();
+                }, 300); // Delay để người dùng thấy được họ đã click vào item
+            });
+        });
+
+        // Đóng menu khi click ra ngoài
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest('.menu-item')) {
+                document.querySelectorAll('.menu-item').forEach(item => {
+                    item.classList.remove('open');
+                });
+                adjustContentMargin();
+            }
+        });
+    }
+
+    // Gọi hàm để thiết lập menu mobile
+    setupMobileMenu();
+
+    // Xử lý khi resize
+    window.addEventListener('resize', function () {
+        setupMobileMenu();
+        adjustContentMargin();
+        limitSidebarHeight();
+    });
+
+    // Đảm bảo sidebar không quá cao
+    function limitSidebarHeight() {
+        if (window.innerWidth <= 767) {
+            const sidebar = document.querySelector('.sidebar');
+            sidebar.style.maxHeight = '50vh';
+        } else {
+            const sidebar = document.querySelector('.sidebar');
+            sidebar.style.maxHeight = '100vh';
+        }
+    }
+
+    // Gọi hàm giới hạn chiều cao sidebar
+    limitSidebarHeight();
+
     function loadPage(pageUrl) {
         // Lưu URL trang hiện tại (điều này quan trọng để kiểm tra cache hoạt động)
         console.log(`Yêu cầu tải trang: ${pageUrl}, trang hiện tại: ${currentPage}`);
@@ -67,6 +177,7 @@
             })
             .catch(error => {
                 if (error.message !== '401 Unauthorized') {
+                    console.error('Lỗi khi tải trang:', error);
                     mainContent.innerHTML = `<p style="color: red;">Lỗi khi tải trang: ${error.message}</p>`;
                 }
             });
@@ -128,69 +239,87 @@
             console.warn(`Hàm startAutoUpdate không được định nghĩa cho trang ${currentPage}`);
         }
     }
-}
 
     // Xử lý sự kiện click trên các submenu
     document.addEventListener('click', function (e) {
-    // Kiểm tra xem có phải click vào submenu-item > a không
-    if (e.target.matches('.submenu-item > a')) {
-        e.preventDefault();
+        // Kiểm tra xem có phải click vào submenu-item > a không
+        if (e.target.matches('.submenu-item > a')) {
+            e.preventDefault();
 
-        // Xóa selected từ tất cả các liên kết
-        document.querySelectorAll('.submenu-item > a.selected').forEach(link => {
-            link.classList.remove('selected');
-        });
+            // Đóng menu trên mobile khi click vào submenu item
+            if (window.innerWidth <= 767) {
+                setTimeout(() => {
+                    document.querySelectorAll('.menu-item').forEach(item => {
+                        item.classList.remove('open');
+                    });
+                    adjustContentMargin();
+                }, 300);
+            }
 
-        // Thêm selected vào liên kết được click
-        e.target.classList.add('selected');
+            // Xóa selected từ tất cả các liên kết
+            document.querySelectorAll('.submenu-item > a.selected').forEach(link => {
+                link.classList.remove('selected');
+            });
 
-        // Lấy URL trang từ thuộc tính data-page
-        const pageUrl = e.target.getAttribute('data-page');
+            // Thêm selected vào liên kết được click
+            e.target.classList.add('selected');
 
-        // Cập nhật URL và tải trang
-        window.history.pushState({ pageUrl }, '', `#${pageUrl}`);
-        loadPage(pageUrl);
-    }
-});
+            // Lấy URL trang từ thuộc tính data-page
+            const pageUrl = e.target.getAttribute('data-page');
 
-function handleRefresh() {
-    // Lấy pageUrl từ hash URL hoặc mặc định là /wks
-    const pageUrl = window.location.hash.replace('#', '') || '/wks';
-    console.log(`Khởi động với trang: ${pageUrl}`);
-
-    // Tìm và đánh dấu liên kết active
-    const activeLink = [...submenuLinks].find(link => link.getAttribute('data-page') === pageUrl);
-    if (activeLink) {
-        activeLink.classList.add('selected');
-        loadPage(pageUrl);
-    } else {
-        console.warn(`Không tìm thấy liên kết phù hợp với hash: ${pageUrl}`);
-        loadPage('/wks'); // Mặc định tải trang /wks
-    }
-}
-
-// Xử lý nút back/forward của trình duyệt
-window.addEventListener('popstate', (event) => {
-    const pageUrl = event.state?.pageUrl || '/wks';
-    loadPage(pageUrl);
-});
-
-// Sự kiện khi người dùng chuẩn bị rời khỏi trang
-window.addEventListener('beforeunload', () => {
-    stopCurrentUpdates();
-});
-
-// Khởi tạo trang ban đầu
-handleRefresh();
-
-// Xử lý nút logout
-const logoutButton = document.getElementById('logout-button');
-if (logoutButton) {
-    logoutButton.addEventListener('click', () => {
-        sessionStorage.removeItem('token');
-        window.location.href = '/';
+            // Cập nhật URL và tải trang
+            window.history.pushState({ pageUrl }, '', `#${pageUrl}`);
+            loadPage(pageUrl);
+        }
     });
-} else {
-    console.warn('Không tìm thấy nút logout.');
-}
+
+    function handleRefresh() {
+        // Lấy pageUrl từ hash URL hoặc mặc định là /wks
+        const pageUrl = window.location.hash.replace('#', '') || '/wks';
+        console.log(`Khởi động với trang: ${pageUrl}`);
+
+        // Tìm và đánh dấu liên kết active
+        const activeLink = [...submenuLinks].find(link => link.getAttribute('data-page') === pageUrl);
+        if (activeLink) {
+            activeLink.classList.add('selected');
+            loadPage(pageUrl);
+        } else {
+            console.warn(`Không tìm thấy liên kết phù hợp với hash: ${pageUrl}`);
+            loadPage('/wks'); // Mặc định tải trang /wks
+        }
+    }
+
+    // Xử lý nút back/forward của trình duyệt
+    window.addEventListener('popstate', (event) => {
+        const pageUrl = event.state?.pageUrl || '/wks';
+        loadPage(pageUrl);
+    });
+
+    // Sự kiện khi người dùng chuẩn bị rời khỏi trang
+    window.addEventListener('beforeunload', () => {
+        stopCurrentUpdates();
+    });
+
+    // Khởi tạo trang ban đầu
+    handleRefresh();
+
+    // Xử lý nút logout
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', () => {
+            sessionStorage.removeItem('token');
+            window.location.href = '/';
+        });
+    } else {
+        console.warn('Không tìm thấy nút logout.');
+    }
+
+    // Điều chỉnh margin ban đầu
+    adjustContentMargin();
+
+    // Xử lý sự kiện khi trang hoàn tất tải
+    window.addEventListener('load', function () {
+        adjustContentMargin();
+        setupMobileMenu();
+    });
 });

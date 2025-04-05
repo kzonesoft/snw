@@ -28,86 +28,99 @@ body {
     top: 0; /* Căn trên */
     left: 0; /* Căn trái */
     z-index: 1000; /* Luôn nằm trên content */
+    overflow-y: auto; /* Cho phép cuộn nếu menu dài */
 }
 
-.sidebar .logo {
-    text-align: center;
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 16px;
-    color: #ffffff;
-    letter-spacing: 2px;
-}
+    .sidebar .logo {
+        text-align: center;
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 16px;
+        color: #ffffff;
+        letter-spacing: 2px;
+        width: 100%;
+    }
 
-.sidebar .logo span {
-    color: #48bb78; /* Màu chữ K trong logo */
-}
+        .sidebar .logo span {
+            color: #48bb78; /* Màu chữ K trong logo */
+        }
 
 .divider {
     margin: 0px 0 15px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    width: 100%;
 }
 
 .menu {
     list-style: none;
     margin-top: 30px;
+    width: 100%;
+    padding: 0;
 }
 
 .menu-item {
     margin-bottom: 20px;
+    width: 100%;
 }
 
-.menu-item > label {
-    display: flex;
-    align-items: center;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #f7fafc;
-    padding: 10px 12px;
-    border-radius: 8px;
-    cursor: default;
-    position: relative;
-}
+    .menu-item > label {
+        display: flex;
+        align-items: center;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #f7fafc;
+        padding: 10px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        position: relative;
+        width: 100%;
+        box-sizing: border-box;
+    }
 
-.menu-item > label i {
-    margin-right: 10px;
-    font-size: 1.3rem;
-    color: #48bb78;
-}
+        .menu-item > label i {
+            margin-right: 10px;
+            font-size: 1.3rem;
+            color: #48bb78;
+        }
 
 .submenu {
     list-style: none;
     margin-top: 3px;
     margin-left: 15px;
+    padding: 0;
+    width: calc(100% - 15px);
 }
 
 .submenu-item {
     margin-bottom: 2px;
+    width: 100%;
 }
 
-.submenu-item > a {
-    display: block;
-    font-size: 0.85rem;
-    font-weight: 400;
-    color: #e2e8f0;
-    text-decoration: none;
-    padding: 8px 10px;
-    border-radius: 6px;
-    transition: background-color 0.3s, color 0.3s;
-}
+    .submenu-item > a {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 400;
+        color: #e2e8f0;
+        text-decoration: none;
+        padding: 8px 10px;
+        border-radius: 6px;
+        transition: background-color 0.3s, color 0.3s;
+        width: 100%;
+        box-sizing: border-box;
+    }
 
-/* Sub-item hover effect */
-.submenu-item > a:hover {
-    background-color: #4a5568;
-    color: #ffffff;
-}
+        /* Sub-item hover effect */
+        .submenu-item > a:hover {
+            background-color: #4a5568;
+            color: #ffffff;
+        }
 
-/* Selected sub-item styling */
-.submenu-item > a.selected {
-    background-color: #4a5568;
-    color: #ffffff;
-    font-weight: 600;
-}
+        /* Selected sub-item styling */
+        .submenu-item > a.selected {
+            background-color: #4a5568;
+            color: #ffffff;
+            font-weight: 600;
+        }
 
 /* Content Styling */
 .content {
@@ -121,45 +134,47 @@ body {
     box-sizing: border-box; /* Tính toán kích thước đúng */
 }
 
-.content h1 {
-    font-size: 2.5rem;
-    color: #2d3748;
-    margin-bottom: 20px;
-}
+    .content h1 {
+        font-size: 2.5rem;
+        color: #2d3748;
+        margin-bottom: 20px;
+    }
 
-.content p {
-    font-size: 1rem;
-    color: #4a5568;
-    line-height: 1.6;
-}
+    .content p {
+        font-size: 1rem;
+        color: #4a5568;
+        line-height: 1.6;
+    }
 
-/* Logout Button Styling */
+/* Logout Button Styling - Đã cập nhật */
 .logout {
-    margin-top: auto; /* Đưa nút xuống cuối sidebar */
-    text-align: left;
+    margin-top: auto; /* Đẩy xuống dưới cùng */
+    width: 100%;
     padding: 20px 0;
+    text-align: left; /* Căn trái */
 }
 
-.logout button {
-    background: transparent;
-    color: #ffffff;
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background-color 0.3s, transform 0.2s;
-}
+    .logout button {
+        background: transparent;
+        color: #ffffff;
+        font-size: 0.9rem;
+        font-weight: 600;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.3s, transform 0.2s;
+        text-align: left;
+    }
 
-.logout button:hover {
-    background: #4a5568;
-    transform: scale(1.05);
-}
+        .logout button:hover {
+            background: #4a5568;
+            transform: scale(1.05);
+        }
 
-.logout button i {
-    margin-right: 8px;
-}
+        .logout button i {
+            margin-right: 8px;
+        }
 
 /* Responsive Design */
 @media screen and (max-width: 768px) {
@@ -173,26 +188,247 @@ body {
     }
 }
 
-@media screen and (max-width: 480px) {
+/* Mobile styles - Dành cho thiết bị di động */
+@media screen and (max-width: 767px) {
     body {
-        flex-direction: column; /* Sidebar sẽ nằm trên cùng */
+        flex-direction: column;
+        overflow-x: hidden;
     }
 
     .sidebar {
-        width: 100%; /* Full chiều rộng */
-        height: auto; /* Chiều cao tự động */
-        flex-direction: row; /* Hiển thị ngang */
-        padding: 10px 0;
-        overflow-x: auto; /* Cuộn ngang nếu quá nhiều mục */
-    }
-
-    .menu-item {
-        margin-bottom: 0;
-        margin-right: 15px;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: auto;
+        max-height: 50vh; /* Tối đa 50% chiều cao màn hình */
+        z-index: 1000;
+        padding: 10px;
+        overflow-y: auto; /* Cho phép cuộn sidebar */
+        background: linear-gradient(145deg, #2d3748, #434c5e);
     }
 
     .content {
-        margin-left: 0; /* Không bị ảnh hưởng bởi sidebar */
-        width: 100%; /* Full chiều rộng */
+        margin-left: 0;
+        padding: 10px;
+        width: 100%;
+        margin-top: 150px; /* Điều chỉnh theo chiều cao của sidebar */
+    }
+
+    /* Logo và phần trên */
+    .sidebar .logo {
+        font-size: 1.5rem;
+        text-align: center;
+        margin-bottom: 5px;
+    }
+
+    .divider {
+        margin: 5px 0;
+    }
+
+    /* Menu styles cải tiến */
+    .menu {
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+        margin-top: 10px;
+        margin-bottom: 10px;
+        max-height: calc(100% - 100px); /* Để đảm bảo có không gian cho menu */
+    }
+
+    .menu-item {
+        position: relative;
+        margin-bottom: 8px;
+        width: 100%;
+    }
+
+        .menu-item > label {
+            display: flex;
+            align-items: center;
+            padding: 8px 10px;
+            background-color: #3a445a;
+            border-radius: 5px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+            .menu-item > label i {
+                margin-right: 8px;
+                color: #48bb78;
+            }
+
+    /* Submenu cải tiến */
+    .submenu {
+        display: none;
+        background-color: #2d3748;
+        border-radius: 5px;
+        margin-top: 5px;
+        margin-left: 15px;
+        margin-right: 5px;
+        padding: 5px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        max-height: 200px; /* Đặt chiều cao tối đa */
+        overflow-y: auto; /* Cho phép cuộn */
+    }
+
+    .menu-item.open .submenu {
+        display: block;
+    }
+
+    .submenu-item {
+        margin-bottom: 2px;
+    }
+
+        .submenu-item > a {
+            padding: 12px 10px;
+            display: block;
+            font-size: 0.85rem;
+            border-radius: 4px;
+        }
+
+            .submenu-item > a:active {
+                background-color: #4a5568;
+            }
+
+    /* Logout - Cập nhật vị trí trên mobile */
+    .logout {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        margin: 0;
+        padding: 0;
+        width: auto;
+        text-align: right;
+    }
+
+        .logout button {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            background-color: rgba(74, 85, 104, 0.7);
+            border-radius: 5px;
+            display: inline-block;
+            width: auto;
+        }
+
+    /* Scrollbar nhỏ và tinh tế */
+    .submenu::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    .submenu::-webkit-scrollbar-track {
+        background: #1a202c;
+    }
+
+    .submenu::-webkit-scrollbar-thumb {
+        background: #4a5568;
+        border-radius: 4px;
     }
 }
+
+/* Thiết lập cho table và scrollbar */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 13px;
+    background-color: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+th, td {
+    padding: 10px 12px;
+    text-align: left;
+}
+
+th {
+    background-color: #484F60;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    border-bottom: 2px solid #434c5e;
+    padding: 5px 10px;
+    line-height: 1.5;
+}
+
+td {
+    font-size: 0.9rem;
+    color: #555;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+tr:hover {
+    background-color: #f1f1f1;
+}
+
+.status-green {
+    color: #009966;
+    font-weight: 600;
+}
+
+.status-orange {
+    color: #FF6633;
+    font-weight: 600;
+}
+
+.status-red {
+    color: #CC0000;
+    font-weight: 600;
+}
+
+.status-blue {
+    color: #4171AF;
+    font-weight: 600;
+}
+
+/* Responsive tables */
+@media screen and (max-width: 1024px) {
+    table {
+        width: 100%;
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+        /* Đảm bảo cột đầu tiên (tên máy) luôn hiển thị */
+        table th:first-child,
+        table td:first-child {
+            position: sticky;
+            left: 0;
+            background-color: #fff;
+            z-index: 1;
+        }
+
+        table th:first-child {
+            background-color: #484F60;
+        }
+
+        table tr:nth-child(even) td:first-child {
+            background-color: #f8f9fa;
+        }
+}
+
+/* Thiết lập cho scrollbar */
+::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }

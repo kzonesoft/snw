@@ -1,4 +1,4 @@
-body {
+﻿body {
     font-family: 'Poppins', sans-serif;
     margin: 0;
     background-color: #f9fafc;
@@ -140,3 +140,119 @@ tr:hover {
     text-align: center;
     white-space: nowrap;
 }
+
+@media screen and (max-width: 1024px) {
+    /* Áp dụng cho tablet */
+    table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    th, td {
+        padding: 8px 6px;
+        font-size: 0.85rem;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    /* Áp dụng cho màn hình nhỏ */
+    .content-wrapper {
+        padding: 10px;
+    }
+
+    .header-card {
+        flex-direction: column;
+        height: auto;
+        padding: 10px;
+    }
+
+        .header-card h1 {
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+    table {
+        font-size: 0.75rem;
+    }
+
+    th, td {
+        padding: 6px 4px;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    /* Áp dụng cho điện thoại */
+    table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    th, td {
+        padding: 5px 3px;
+        font-size: 0.7rem;
+    }
+
+    .header-card {
+        padding: 8px 5px;
+    }
+
+        .header-card h1 {
+            font-size: 0.85rem;
+        }
+
+    .client-card {
+        padding: 4px 8px;
+        font-size: 0.8rem;
+    }
+}
+
+/* Thêm vào wks.css và hwinfo.css */
+
+/* Responsive tables */
+@media screen and (max-width: 1024px) {
+    table {
+        width: 100%;
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+        /* Đảm bảo cột đầu tiên (tên máy) luôn hiển thị */
+        table th:first-child,
+        table td:first-child {
+            position: sticky;
+            left: 0;
+            background-color: #fff;
+            z-index: 1;
+        }
+
+        table th:first-child {
+            background-color: #484F60;
+        }
+
+        table tr:nth-child(even) td:first-child {
+            background-color: #f8f9fa;
+        }
+}
+
+/* Các thiết lập cho trải nghiệm scroll tốt hơn */
+::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
