@@ -39,13 +39,12 @@
         currentAction = null;
     }
 
-    // Gửi yêu cầu tắt máy/khởi động lại
     async function sendPowerAction() {
         const password = passwordInput.value.trim();
-
         if (!password) {
             errorMessage.textContent = 'Vui lòng nhập mật khẩu!';
             errorMessage.style.display = 'block';
+            errorMessage.style.color = 'red'; // Đảm bảo màu đỏ cho thông báo lỗi
             return;
         }
 
@@ -63,36 +62,42 @@
                     'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    Action: currentAction,    // Chú ý: Viết hoa 'Action' theo model của server
-                    Password: password        // Chú ý: Viết hoa 'Password' theo model của server
+                    Action: currentAction,
+                    Password: password
                 })
             });
 
             const data = await response.json();
 
-            // Trong hàm sendPowerAction, phần xử lý phản hồi thành công
             if (data.success) {
                 // Nếu yêu cầu thành công
-                closeModal();
+                // Thay đổi màu sắc của thông báo thành màu xanh lá để hiển thị thành công
+                errorMessage.style.color = 'green';
 
-                // Hiển thị thông báo thành công
+                // Đặt nội dung thành thông báo thành công
                 if (currentAction === 'shutdown') {
-                    window.alert('Máy chủ sẽ tắt trong giây lát!');
+                    errorMessage.textContent = 'Máy chủ sẽ tắt trong giây lát!';
                 } else if (currentAction === 'restart') {
-                    window.alert('Máy chủ sẽ khởi động lại trong giây lát!');
+                    errorMessage.textContent = 'Máy chủ sẽ khởi động lại trong giây lát!';
                 }
 
-                // Nếu server trả về token mới, cập nhật token
-                if (data.token) {
-                    sessionStorage.setItem('token', data.token);
-                }
+                // Hiển thị thông báo
+                errorMessage.style.display = 'block';
+
+                // Đóng modal sau một khoảng thời gian (ví dụ: 3 giây)
+                setTimeout(() => {
+                    closeModal();
+                }, 5000);
+
             } else {
                 // Nếu có lỗi
+                errorMessage.style.color = 'red'; // Đảm bảo màu đỏ cho thông báo lỗi
                 errorMessage.textContent = data.message || 'Mật khẩu không đúng hoặc không có quyền thực hiện hành động này.';
                 errorMessage.style.display = 'block';
             }
         } catch (error) {
             console.error('Lỗi khi gửi yêu cầu:', error);
+            errorMessage.style.color = 'red';
             errorMessage.textContent = 'Có lỗi xảy ra. Vui lòng thử lại sau.';
             errorMessage.style.display = 'block';
         }
@@ -105,12 +110,15 @@
     cancelButton.addEventListener('click', closeModal);
     confirmButton.addEventListener('click', sendPowerAction);
 
-    // Đóng modal khi click bên ngoài
-    window.addEventListener('click', (event) => {
-        if (event.target === modal) {
-            closeModal();
-        }
-    });
+    //// Đóng modal khi click bên ngoài
+    //window.addEventListener('click', (event) => {
+    //    if (event.target === modal) {
+    //        // Hỏi người dùng có muốn đóng modal không
+    //        if (confirm('Bạn có muốn hủy thao tác này không?')) {
+    //            closeModal();
+    //        }
+    //    }
+    //});
 
     // Xử lý khi nhấn Enter trong input mật khẩu
     passwordInput.addEventListener('keydown', (event) => {
