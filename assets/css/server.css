@@ -1,4 +1,4 @@
-body {
+﻿body {
     font-family: 'Poppins', sans-serif;
     margin: 0;
     background-color: #f9fafc;
@@ -6,6 +6,10 @@ body {
     display: flex;
     flex-direction: column;
     padding: 0px;
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+    height: 100%;
+    position: relative;
 }
 
 .content-wrapper {
@@ -14,6 +18,9 @@ body {
     background: #ffffff;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
     border-radius: 8px;
+    overflow: visible;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
 }
 
 .header-card {
@@ -170,14 +177,34 @@ body {
 @media screen and (max-width: 768px) {
     .chart-card {
         width: 100%;
+        margin-bottom: 12px;
+        padding: 8px;
+    }
+
+    .chart-content {
+        height: 140px;
     }
 
     .disk-item {
         width: 100%;
+        padding: 10px;
+        margin-bottom: 8px;
     }
 
     .content-wrapper {
         padding: 10px;
+    }
+
+    /* Đảm bảo header không quá cao */
+    .header-card {
+        height: auto;
+        min-height: 36px;
+        padding: 6px 10px;
+    }
+
+    /* Giảm shadow để tăng hiệu suất render */
+    .chart-card, .disk-item {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 }
 
@@ -192,4 +219,71 @@ body {
 
 .usage-high {
     background: linear-gradient(to right, #F56565, #C53030);
+}
+
+/* Thiết lập cho scrollbar */
+::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
+
+/* Cải thiện responsive cho mobile */
+@media screen and (max-width: 480px) {
+    .disk-list {
+        max-height: calc(100vh - 320px);
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+
+    .chart-card {
+        margin-bottom: 10px;
+        padding: 6px;
+    }
+
+    .chart-content {
+        height: 120px;
+    }
+
+    .chart-percentage {
+        font-size: 1rem;
+    }
+
+    .disk-item {
+        margin-bottom: 6px;
+        padding: 8px;
+    }
+
+    .disk-icon {
+        font-size: 1.4rem;
+    }
+
+    .disk-name {
+        font-size: 0.9rem;
+    }
+
+    .disk-space {
+        font-size: 0.8rem;
+    }
+}
+
+/* Thêm hỗ trợ touch tốt hơn cho mobile */
+@media (pointer: coarse) {
+    .disk-list, .charts-container {
+        padding: 4px;
+        touch-action: pan-y;
+    }
 }

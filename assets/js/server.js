@@ -2,10 +2,14 @@
 (function () {
     let cpuChart = null;
     let ramChart = null;
+    let updateInterval = null;
+    let lastTouchY = 0;
+    let preventPullToRefresh = false;
+    let isUpdating = false;
 
     const serverModule = {
         initCharts: function () {
-            // Khởi tạo biểu đồ CPU
+            // Khởi tạo biểu đồ CPU với tùy chọn phản hồi nhanh hơn cho mobile
             const cpuCtx = document.getElementById('cpuChart').getContext('2d');
             cpuChart = new Chart(cpuCtx, {
                 type: 'doughnut',
@@ -30,12 +34,12 @@
                         }
                     },
                     animation: {
-                        duration: 500
+                        duration: window.innerWidth <= 768 ? 200 : 500 // Rút ngắn thời gian animation trên mobile
                     }
                 }
             });
 
-            // Khởi tạo biểu đồ RAM
+            // Khởi tạo biểu đồ RAM với tùy chọn tương tự
             const ramCtx = document.getElementById('ramChart').getContext('2d');
             ramChart = new Chart(ramCtx, {
                 type: 'doughnut',
@@ -60,13 +64,17 @@
                         }
                     },
                     animation: {
-                        duration: 500
+                        duration: window.innerWidth <= 768 ? 200 : 500
                     }
                 }
             });
         },
 
         loadData: async function () {
+            if (isUpdating) return; // Ngăn chặn nhiều yêu cầu đồng thời
+
+            isUpdating = true;
+
             try {
                 const token = sessionStorage.getItem('token'); // Lấy token từ sessionStorage
                 if (!token) {
@@ -106,12 +114,18 @@
 
             } catch (error) {
                 console.error('Error fetching server statistics:', error);
+                // Trong trường hợp lỗi, giữ nguyên dữ liệu cũ không thay đổi UI
+            } finally {
+                isUpdating = false;
             }
         },
 
         updateDiskList: function (drives) {
             const diskList = document.getElementById('diskList');
             diskList.innerHTML = '';
+
+            // Sắp xếp ổ đĩa theo tên
+            drives.sort((a, b) => a.disk.localeCompare(b.disk));
 
             drives.forEach(drive => {
                 // Tính phần trăm sử dụng
@@ -138,6 +152,7 @@
                 // Tạo HTML cho ổ đĩa
                 const diskItem = document.createElement('div');
                 diskItem.className = 'disk-item';
+                diskItem.setAttribute('data-drive', drive.disk);
                 diskItem.innerHTML = `
                     <div class="disk-info">
                         <div class="disk-icon">
@@ -162,20 +177,73 @@
         },
 
         startAutoUpdate: function () {
-            console.log('Server Stats: Loading data once');
+            console.log('Server Stats: Starting auto update');
 
             // Khởi tạo biểu đồ
             this.initCharts();
 
-            // Chỉ tải dữ liệu 1 lần khi trang được tải
+            // Tối ưu cho thiết bị di động
+            optimizeForMobile();
+
+            // Tải dữ liệu ngay lập tức
             this.loadData();
+
+            // Thiết lập cập nhật định kỳ - mỗi 30 giây
+            clearInterval(updateInterval); // Xóa interval cũ (nếu có)
+            updateInterval = setInterval(() => this.loadData(), 30000);
         },
 
         stopAutoUpdate: function () {
-            console.log('Server Stats: No interval to stop');
-            // Không cần làm gì vì không có interval
+            console.log('Server Stats: Stopping auto update');
+
+            // Dừng cập nhật tự động
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
         }
     };
+
+    // Tối ưu scroll trên thiết bị di động
+    function optimizeForMobile() {
+        if (window.innerWidth <= 768) {
+            // Ngăn chặn việc bounce scroll trên iOS
+            document.body.addEventListener('touchmove', function (e) {
+                if (e.target.closest('.disk-list, .charts-container')) {
+                    e.stopPropagation();
+                }
+            }, { passive: true });
+
+            // Đảm bảo rằng disk-list không cao quá màn hình
+            const diskList = document.getElementById('diskList');
+            if (diskList) {
+                const maxHeight = window.innerHeight * 0.6; // 60% chiều cao màn hình
+                diskList.style.maxHeight = maxHeight + 'px';
+                diskList.style.overflowY = 'auto';
+            }
+
+            // Xử lý pull-to-refresh trên iOS
+            document.addEventListener('touchstart', function (e) {
+                if (window.scrollY === 0) {
+                    lastTouchY = e.touches[0].clientY;
+                    preventPullToRefresh = true;
+                } else {
+                    preventPullToRefresh = false;
+                }
+            }, { passive: false });
+
+            document.addEventListener('touchmove', function (e) {
+                if (preventPullToRefresh && e.touches[0].clientY > lastTouchY && window.scrollY === 0) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+        }
+    }
+
+    // Xử lý khi resize màn hình
+    window.addEventListener('resize', function () {
+        optimizeForMobile();
+    });
 
     // Gán các phương thức vào window để có thể gọi từ index.js
     window.startAutoUpdate = function () {
@@ -186,24 +254,9 @@
         serverModule.stopAutoUpdate();
     };
 
-    // Thêm nút refresh
-    document.addEventListener('DOMContentLoaded', function () {
-        // Tạo nút refresh 
-        const headerCard = document.querySelector('.header-card');
-        const refreshButton = document.createElement('button');
-        refreshButton.className = 'refresh-button';
-        refreshButton.innerHTML = '<i class="fas fa-sync-alt"></i> Làm mới';
-        refreshButton.style.background = 'transparent';
-        refreshButton.style.border = '1px solid #98FB98';
-        refreshButton.style.color = '#98FB98';
-        refreshButton.style.padding = '4px 8px';
-        refreshButton.style.borderRadius = '3px';
-        refreshButton.style.fontSize = '0.8rem';
-        refreshButton.style.cursor = 'pointer';
-        refreshButton.style.marginLeft = '10px';
-        refreshButton.addEventListener('click', function () {
-            serverModule.loadData();
-        });
-        headerCard.appendChild(refreshButton);
+    // Khi trang được tải xong, đảm bảo tốc độ cuộn mượt mà
+    window.addEventListener('DOMContentLoaded', function () {
+        // Kích hoạt fastclick để giảm độ trễ trên thiết bị di động
+        document.body.addEventListener('touchstart', function () { }, { passive: true });
     });
 })();

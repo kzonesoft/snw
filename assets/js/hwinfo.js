@@ -60,7 +60,7 @@
                             <td>${mainboardName}</td>
                             <td>${lanName}</td>
                             <td>${ramTotal} GB</td>
-                            <td>${virtualization ? 'Có' : 'Không'}</td>
+                            <td>${virtualization ? 'Bật' : 'Tắt'}</td>
                             <td>${mac}</td>
                         </tr>
                     `;
