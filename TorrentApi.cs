@@ -278,11 +278,9 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             bool isVerified = await VerifyPathsAsync(savePath, torrentFileSavePath).ConfigureAwait(false);
             if (!isVerified) return false;
 
-            using (var stream = new MemoryStream(torrentBytes))
-            {
-                var postTorrentResult = await PostTorrent(stream).ConfigureAwait(false);
-                return postTorrentResult != null;
-            }
+            // Sử dụng trực tiếp byte array thay vì tạo stream
+            var postTorrentResult = await PostTorrent(torrentBytes).ConfigureAwait(false);
+            return postTorrentResult != null;
         }
 
         //Set đường dẫn
@@ -355,15 +353,15 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             }
         }
 
-        private async Task<AddStreamResponse> PostTorrent(Stream inputStream)
+        private async Task<AddByteArrayResponse> PostTorrent(byte[] torrentBytes)
         {
-            Contract.Requires(inputStream != null);
+            Contract.Requires(torrentBytes != null);
 
             GetToken(); // Đảm bảo token còn hiệu lực
-            AddStreamResponse result;
-            using (var request = new AddStreamRequest())
+            AddByteArrayResponse result;
+            using (var request = new AddByteArrayRequest())
             {
-                request.SetFile(inputStream);
+                request.SetFile(torrentBytes);
                 request.SetAction(UrlAction.AddFile);
                 request.IncludeTorrentList(true);
 
