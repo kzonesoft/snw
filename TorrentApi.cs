@@ -438,7 +438,7 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
 
         #endregion
 
-        // Chuyển đổi GetToken từ WebRequest sang HttpClient, sử dụng HttpClient property
+        
         private void GetToken()
         {
             try
