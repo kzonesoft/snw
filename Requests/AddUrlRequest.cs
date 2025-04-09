@@ -3,6 +3,7 @@ using Kzone.Engine.Controller.Infrastructure.Api.Responses;
 using Kzone.Engine.Controller.Infrastructure.Helpers;
 using System;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -52,8 +53,10 @@ namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
                 throw new InvalidOperationException("FileUrl is missing with AddUrl action");
         }
 
-        protected override void OnProcessingRequest(System.Net.HttpWebRequest wr)
+        // Phương thức đúng theo lớp cha
+        protected override void OnProcessingRequest(HttpClient httpClient, HttpRequestMessage requestMessage)
         {
+            // Không cần xử lý đặc biệt cho AddUrlRequest
         }
 
         protected override void OnProcessedRequest(AddUrlResponse result)

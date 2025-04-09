@@ -1,37 +1,63 @@
 ﻿using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Threading;
 
 namespace Kzone.Engine.Controller.Infrastructure.Helpers
 {
+    /// <summary>
+    /// Factory để quản lý và tạo các HttpClient instances.
+    /// Thiết kế theo singleton pattern để tối ưu việc sử dụng tài nguyên.
+    /// </summary>
     public static class HttpClientFactory
     {
-        private static readonly HttpClient _client;
+        // Sử dụng Lazy<T> để đảm bảo thread-safe và chỉ khởi tạo một lần
+        private static readonly Lazy<HttpClient> _clientLazy =
+            new Lazy<HttpClient>(() => CreateDefaultClient(), LazyThreadSafetyMode.ExecutionAndPublication);
 
-        static HttpClientFactory()
+        /// <summary>
+        /// Lấy HttpClient instance mặc định đã được cấu hình
+        /// </summary>
+        public static HttpClient Client => _clientLazy.Value;
+
+        /// <summary>
+        /// Tạo một HttpClient mới với cấu hình mặc định
+        /// </summary>
+        private static HttpClient CreateDefaultClient()
         {
-            _client = new HttpClient();
-            _client.DefaultRequestHeaders.Accept.Clear();
-            _client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            _client.Timeout = TimeSpan.FromSeconds(30);
+            var client = new HttpClient();
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            client.Timeout = TimeSpan.FromSeconds(30);
+            return client;
         }
 
-        public static HttpClient CreateClient()
-        {
-            return _client;
-        }
-
+        /// <summary>
+        /// Tạo HttpClient mới với URL cơ sở và thông tin xác thực
+        /// </summary>
+        /// <param name="baseUrl">URL cơ sở</param>
+        /// <param name="username">Tên đăng nhập</param>
+        /// <param name="password">Mật khẩu</param>
+        /// <returns>HttpClient đã được cấu hình</returns>
         public static HttpClient CreateClient(string baseUrl, string username, string password)
         {
-            var client = CreateClient();
-            client.BaseAddress = new Uri(baseUrl);
+            var handler = new HttpClientHandler();
 
             if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
             {
-                var authValue = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{username}:{password}"));
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", authValue);
+                handler.Credentials = new System.Net.NetworkCredential(username, password);
             }
 
+            var client = new HttpClient(handler);
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            if (!string.IsNullOrEmpty(baseUrl))
+            {
+                client.BaseAddress = new Uri(baseUrl);
+            }
+
+            client.Timeout = TimeSpan.FromSeconds(30);
             return client;
         }
     }

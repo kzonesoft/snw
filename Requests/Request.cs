@@ -1,6 +1,7 @@
 ﻿using Kzone.Engine.Controller.Infrastructure.Api.Responses;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 
 namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
@@ -15,9 +16,8 @@ namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
         #endregion
 
         /// <summary>
-        /// Fuck yeah!
+        /// Tạo danh sách các URL actions được phép
         /// </summary>
-        /// <returns></returns>
         private static IEnumerable<UrlAction> GenerateAuthorizedUrl()
         {
             yield return UrlAction.Default;
@@ -43,14 +43,18 @@ namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
 
         protected override void ToUrl(StringBuilder sb)
         {
+            // Không cần thêm các tham số trong trường hợp Request cơ bản
         }
 
-        protected override void OnProcessingRequest(System.Net.HttpWebRequest wr)
+        // Đây là phương thức đúng theo abstract trong BaseRequest
+        protected override void OnProcessingRequest(HttpClient httpClient, HttpRequestMessage requestMessage)
         {
+            // Không cần xử lý đặc biệt cho request cơ bản
         }
 
         protected override void OnProcessedRequest(Response result)
         {
+            // Không cần xử lý đặc biệt sau khi nhận response
         }
 
         protected override bool CheckAction(UrlAction action)

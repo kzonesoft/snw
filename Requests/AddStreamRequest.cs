@@ -4,7 +4,10 @@ using Kzone.Engine.Controller.Infrastructure.Helpers;
 using System;
 using System.Diagnostics.Contracts;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 
 namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
@@ -70,75 +73,34 @@ namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
                 throw new InvalidOperationException("FileStream is missing with AddFile action");
         }
 
-        protected override void OnProcessingRequest(System.Net.HttpWebRequest wr)
+        // Triển khai đúng phương thức từ lớp cha
+        protected override void OnProcessingRequest(HttpClient httpClient, HttpRequestMessage requestMessage)
         {
-            if (wr == null)
-            {
-                throw new ArgumentNullException(nameof(wr));
-            }
-
             if (InputStream != null)
             {
                 string boundary = "---------------------------" + DateTime.Now.Ticks.ToString("x", CultureInfo.InvariantCulture);
-                byte[] boundarybytes = Encoding.ASCII.GetBytes("\r\n--" + boundary + "\r\n");
 
-                wr.ContentType = "multipart/form-data; boundary=" + boundary;
-                wr.Method = "POST";
+                // Chuyển từ GET sang POST
+                requestMessage.Method = HttpMethod.Post;
 
-                using (var ms = new ChunkedMemoryStream())
-                {
-                    ms.Write(boundarybytes, 0, boundarybytes.Length);
-                    const string headerTemplate = "Content-Disposition: form-data; name=\"{0}\"; filename=\"{1}\"\r\nContent-Type: {2}\r\n";
-                    string header = string.Format(CultureInfo.InvariantCulture, headerTemplate, "torrent_file", "file.torrent", "application/octet-stream");
-                    byte[] headerbytes = Encoding.UTF8.GetBytes(header);
-                    ms.Write(headerbytes, 0, headerbytes.Length);
+                // Tạo nội dung multipart
+                var multipartContent = new MultipartFormDataContent(boundary);
 
-                    byte[] contenttypebytes = Encoding.ASCII.GetBytes("Content-Type: application/x-bittorrent\r\n\r\n");
-                    ms.Write(contenttypebytes, 0, contenttypebytes.Length);
+                // Chuẩn bị dữ liệu torrent
+                var memoryStream = new MemoryStream();
+                InputStream.Position = 0;
+                InputStream.CopyTo(memoryStream);
+                memoryStream.Position = 0;
 
-                    byte[] buffer = new byte[4096];
-                    int bytesRead;
-                    while ((bytesRead = InputStream.Read(buffer, 0, buffer.Length)) != 0)
-                    {
-                        ms.Write(buffer, 0, bytesRead);
-                    }
-                    //request.InputStream.Close();
+                // Tạo content từ memory stream
+                var streamContent = new StreamContent(memoryStream);
+                streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
-                    byte[] trailer = Encoding.ASCII.GetBytes("\r\n--" + boundary + "--\r\n");
-                    ms.Write(trailer, 0, trailer.Length);
+                // Thêm file torrent vào form data
+                multipartContent.Add(streamContent, "torrent_file", "file.torrent");
 
-#if !PORTABLE
-                    wr.ContentLength = ms.Length;
-#else
-                    wr.Headers["Content-Length"] = ms.Length.ToString(CultureInfo.InvariantCulture);
-#endif
-
-                    // Debug
-                    //ms.Position = 0;
-                    //var srMs = new System.IO.StreamReader(ms);
-                    //string post = srMs.ReadToEnd();
-
-
-
-#if !PORTABLE
-                    System.IO.Stream rs = wr.GetRequestStream();
-#else
-                    System.IO.Stream rs = wr.GetRequestStreamAsync().GetAwaiter().GetResult();
-#endif
-                    if (rs != null)
-                    {
-                        using (rs)
-                        {
-                            ms.Position = 0;
-                            while ((bytesRead = ms.Read(buffer, 0, buffer.Length)) != 0)
-                            {
-                                rs.Write(buffer, 0, bytesRead);
-                            }
-
-                            rs.Flush();
-                        }
-                    }
-                }
+                // Gán nội dung cho request
+                requestMessage.Content = multipartContent;
             }
         }
 
@@ -154,7 +116,6 @@ namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
         protected override bool CheckAction(UrlAction action)
         {
             return action == UrlAction.AddFile;
-
         }
 
         protected override Torrent FindAddedTorrent(AddStreamResponse result)

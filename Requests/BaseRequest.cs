@@ -4,9 +4,13 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
-
+using System.Threading.Tasks;
 
 namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
 {
@@ -15,7 +19,6 @@ namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
         #region Properties
 
         private string _baseUrl;
-
 
         protected Uri BaseUrl
         {
@@ -53,10 +56,7 @@ namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
 
         #endregion
 
-
         #endregion
-
-
 
         #region Fluent Setter
 
@@ -206,46 +206,70 @@ namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
             return new Uri(sb.ToString());
         }
 
-        protected abstract void OnProcessingRequest(System.Net.HttpWebRequest wr);
+        // Phương thức trừu tượng mà các lớp con phải triển khai
+        protected abstract void OnProcessingRequest(HttpClient httpClient, HttpRequestMessage requestMessage);
         protected abstract void OnProcessedRequest(T result);
 
-        public T ProcessRequest(string token, string logOn, string password, System.Net.Cookie cookie)
+        // Phương thức xử lý request thực hiện bằng HttpClient
+        public T ProcessRequest(string token, string logOn, string password, Cookie cookie)
         {
             try
             {
                 Uri uri = ToUrl(token);
-                System.Net.HttpWebRequest wr = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(uri);
-                wr.Credentials = new System.Net.NetworkCredential(logOn, password);
-                wr.CookieContainer = new System.Net.CookieContainer();
-                wr.Timeout = 30000;
 
-                if (cookie != null)
+                using (var httpClientHandler = new HttpClientHandler())
                 {
-                    var cookiUri = cookie.Domain != null ? new Uri(cookie.Domain) : BaseUrl;
-                    wr.CookieContainer.SetCookies(uri, cookie.ToString());
+                    // Thiết lập thông tin xác thực
+                    httpClientHandler.Credentials = new NetworkCredential(logOn, password);
+
+                    // Thiết lập cookie nếu có
+                    if (cookie != null)
+                    {
+                        httpClientHandler.CookieContainer = new CookieContainer();
+                        var cookieUri = cookie.Domain != null ? new Uri(cookie.Domain) : BaseUrl;
+                        httpClientHandler.CookieContainer.Add(uri, new Cookie(cookie.Name, cookie.Value));
+                    }
+
+                    // Tạo HttpClient
+                    using (var httpClient = new HttpClient(httpClientHandler))
+                    {
+                        httpClient.Timeout = TimeSpan.FromSeconds(30);
+
+                        // Tạo HttpRequestMessage
+                        using (var requestMessage = new HttpRequestMessage(HttpMethod.Get, uri))
+                        {
+                            // Cho phép lớp con xử lý request
+                            OnProcessingRequest(httpClient, requestMessage);
+
+                            // Gửi request và đọc response
+                            var response = httpClient.SendAsync(requestMessage).Result;
+
+                            // Đọc và xử lý dữ liệu phản hồi
+                            var jsonResult = response.Content.ReadAsStringAsync().Result;
+
+                            var result = JsonParser.ParseJsonResult(jsonResult);
+
+                            if (result != null && result.CacheId != 0)
+                                CacheId = result.CacheId;
+
+                            result.StatusCode = response.StatusCode;
+
+                            var ret = new T { Result = result };
+                            OnProcessedRequest(ret);
+                            return ret;
+                        }
+                    }
                 }
-
-                OnProcessingRequest(wr);
-
-                using var response = wr.GetResponse();
-                using var stream = response.GetResponseStream() ?? throw new InvalidOperationException("Response stream is null");
-                var sr = new System.IO.StreamReader(stream);
-                var jsonResult = sr.ReadToEnd();
-
-                var result = JsonParser.ParseJsonResult(jsonResult);
-
-                if (result != null && result.CacheId != 0)
-                    CacheId = result.CacheId;
-                var httpWebResponse = response as System.Net.HttpWebResponse;
-                result.StatusCode = httpWebResponse == null
-                    ? default
-                    : httpWebResponse.StatusCode;
-
-                var ret = new T { Result = result };
-                OnProcessedRequest(ret);
-                return ret;
             }
-            catch (System.Net.WebException)
+            catch (HttpRequestException)
+            {
+                return default;
+            }
+            catch (WebException)
+            {
+                return default;
+            }
+            catch (TaskCanceledException) // Timeout
             {
                 return default;
             }

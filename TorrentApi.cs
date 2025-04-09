@@ -3,6 +3,7 @@ using Kzone.Engine.Controller.Domain.Exceptions;
 using Kzone.Engine.Controller.Domain.Interfaces;
 using Kzone.Engine.Controller.Infrastructure.Api.Requests;
 using Kzone.Engine.Controller.Infrastructure.Api.Responses;
+using Kzone.Engine.Controller.Infrastructure.Helpers;
 using Kzone.Semaphore;
 using System;
 using System.Collections.Generic;
@@ -10,17 +11,16 @@ using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-
-
 namespace Kzone.Engine.Controller.Infrastructure.Api
 {
-    public class TorrentApi : ITorrentApi
+    public class TorrentApi : ITorrentApi, IDisposable
     {
-
         private readonly AsyncSemaphore _semaphore = new(1);
         private string _logOn;
         private string _password;
@@ -45,6 +45,10 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
 
         private readonly object _lock = new object();
 
+        // HttpClient instance, tạo khi cần
+        private HttpClient _httpClient;
+        private bool _disposed;
+
         public TorrentApi(bool useCache = false)
         {
             _useCache = useCache;
@@ -62,12 +66,51 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             }
         }
 
+        // Tạo và quản lý HttpClient instance
+        private HttpClient HttpClient
+        {
+            get
+            {
+                if (_httpClient == null)
+                {
+                    _httpClient = CreateHttpClient();
+                }
+                return _httpClient;
+            }
+        }
+
+        // Tạo mới HttpClient với cấu hình hiện tại
+        private HttpClient CreateHttpClient()
+        {
+            var handler = new HttpClientHandler
+            {
+                Credentials = new NetworkCredential(_logOn, _password)
+            };
+
+            // Nếu có cookie, thêm vào HttpClient
+            if (_cookie != null)
+            {
+                handler.CookieContainer = new CookieContainer();
+                handler.CookieContainer.Add(new Uri(_baseUrl), _cookie);
+            }
+
+            var client = new HttpClient(handler)
+            {
+                BaseAddress = new Uri(_baseUrl),
+                Timeout = TimeSpan.FromSeconds(30)
+            };
+
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            return client;
+        }
+
         public void ConfigureAccess(int port, string userName, string password)
         {
             _semaphore.Wait();
             try
             {
-
                 if (port <= 0 || port >= 65536)
                     throw new ArgumentOutOfRangeException(nameof(port));
 
@@ -78,6 +121,10 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
                 _lastGetDataSuccess = DateTime.MinValue;
                 _tokenGetTime = DateTime.MinValue;
                 _baseUrl = string.Format(System.Globalization.CultureInfo.InvariantCulture, "http://{0}:{1}/api/", _ip, _port);
+
+                // Tạo HttpClient mới với cấu hình đã cập nhật
+                DisposeHttpClient();
+
 #if DEBUG
                 Console.WriteLine($"ENGINE API SESSION GENERATE : {_baseUrl}{Environment.NewLine}" +
                                   $"                              {_logOn}" +
@@ -91,48 +138,39 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             }
         }
 
-
         public async Task<bool> IsApiAlive(CancellationToken token)
         {
-            var authToken = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_logOn}:{_password}"));
-            var request = (HttpWebRequest)WebRequest.Create(_baseUrl);
-            request.Timeout = 2000; // Timeout in milliseconds
-            request.Method = "GET";
-            request.Headers["Authorization"] = $"Basic {authToken}";
-
             try
             {
-                using (token.Register(() => request.Abort(), useSynchronizationContext: false))
+                // Sử dụng HttpClient được tạo mới cho thao tác này để tránh ảnh hưởng bởi cấu hình hiện tại
+                using (var httpClient = new HttpClient())
                 {
-                    var response = await Task.Factory.FromAsync(
-                        request.BeginGetResponse,
-                        request.EndGetResponse,
-                        null
-                    ).ConfigureAwait(false);
+                    var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_logOn}:{_password}"));
+                    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+                    httpClient.Timeout = TimeSpan.FromSeconds(2);
 
-                    using (response)
+                    using (var cts = CancellationTokenSource.CreateLinkedTokenSource(token))
                     {
-                        return ((HttpWebResponse)response).StatusCode == HttpStatusCode.OK;
+                        cts.CancelAfter(TimeSpan.FromSeconds(2));
+
+                        var response = await httpClient.GetAsync(_baseUrl, cts.Token).ConfigureAwait(false);
+                        return response.IsSuccessStatusCode;
                     }
                 }
             }
-            catch (WebException ex) when (ex.Status == WebExceptionStatus.RequestCanceled)
+            catch (TaskCanceledException)
             {
-                // Request was canceled by the CancellationToken
-                throw new OperationCanceledException("The request was canceled.", ex, token);
-            }
-            catch (WebException)
-            {
-                // Handle network errors or API issues
-                return false;
+                if (token.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException("The request was canceled.", token);
+                }
+                return false; // Timeout
             }
             catch (Exception)
             {
-                // Handle unexpected exceptions
-                return false;
+                return false; // Network or other errors
             }
         }
-
 
         public async Task<IEnumerable<Torrent>> GetTorrents(bool frozenCheck = false)
         {
@@ -161,10 +199,7 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             return torrents;
         }
 
-
         #region Command
-
-
 
         public async Task<Response> StartTorrent(string hash)
         {
@@ -172,12 +207,10 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             return await ActionTorrentAsync(UrlAction.Start, hash);
         }
 
-
         public async Task<Response> StartTorrents(IEnumerable<string> hashs)
         {
             return await ActionTorrentAsync(UrlAction.Start, hashs);
         }
-
 
         public async Task<Response> StopTorrent(string hash)
         {
@@ -185,31 +218,22 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             return await ActionTorrentAsync(UrlAction.Stop, hash);
         }
 
-
-
         public async Task<Response> StopTorrents(IEnumerable<string> hashs)
         {
             return await ActionTorrentAsync(UrlAction.Stop, hashs);
         }
 
-
-
         public async Task<Response> RemoveTorrent(string hash)
         {
             Contract.Requires(hash != null);
-
             return await ActionTorrentAsync(UrlAction.Remove, hash);
         }
-
-
 
         public async Task<Response> RemoveTorrents(IEnumerable<string> hashs)
         {
             Contract.Requires(hashs != null);
-
             return await ActionTorrentAsync(UrlAction.Remove, hashs);
         }
-
 
         private async Task<Response> ActionTorrentAsync(UrlAction urlAction, string hash)
         {
@@ -233,7 +257,6 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             return await ExecuteRequest(request);
         }
 
-
         #endregion
 
         #region New Torrent
@@ -255,9 +278,11 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             bool isVerified = await VerifyPathsAsync(savePath, torrentFileSavePath).ConfigureAwait(false);
             if (!isVerified) return false;
 
-            using var stream = new MemoryStream(torrentBytes);
-            var postTorrentResult = await PostTorrent(stream).ConfigureAwait(false);
-            return postTorrentResult != null;
+            using (var stream = new MemoryStream(torrentBytes))
+            {
+                var postTorrentResult = await PostTorrent(stream).ConfigureAwait(false);
+                return postTorrentResult != null;
+            }
         }
 
         //Set đường dẫn
@@ -330,12 +355,11 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             }
         }
 
-
         private async Task<AddStreamResponse> PostTorrent(Stream inputStream)
         {
             Contract.Requires(inputStream != null);
 
-            GetToken();
+            GetToken(); // Đảm bảo token còn hiệu lực
             AddStreamResponse result;
             using (var request = new AddStreamRequest())
             {
@@ -414,77 +438,92 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             return await ExecuteRequest(request);
         }
 
-
-
-
         #endregion
 
+        // Chuyển đổi GetToken từ WebRequest sang HttpClient, sử dụng HttpClient property
         private void GetToken()
         {
-            var wr = (HttpWebRequest)WebRequest.Create(_tokenUrl);
-            wr.Method = "GET";
-            wr.Credentials = new NetworkCredential(_logOn, _password);
             try
             {
-#if !PORTABLE
-                using (var response = wr.GetResponse())
-#else
-                using (var response = wr.GetResponseAsync().Result)
-#endif
+                // Tạo HttpClient tạm thời cho việc lấy token
+                using (var httpClient = new HttpClient())
                 {
-                    string result;
-                    using (var stream = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
-                    {
-                        result = stream.ReadToEnd();
-                    }
+                    // Thiết lập thông tin xác thực
+                    var credentials = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{_logOn}:{_password}"));
+                    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+                    httpClient.Timeout = TimeSpan.FromSeconds(10);
 
-                    if (result == null)
-                    {
-                        throw new ServerUnavailableException("Unable to retreive WebUI token");
-                    }
+                    // Gửi request đồng bộ (vì phương thức gốc là đồng bộ)
+                    var response = httpClient.GetAsync(_tokenUrl).Result;
 
-                    var cookies = response.Headers != null ? response.Headers["Set-Cookie"] : null;
-                    if (cookies != null && cookies.Contains("GUID"))
+                    // Xử lý response
+                    if (response.IsSuccessStatusCode)
                     {
-                        var tab1 = cookies.Split(';');
-                        if (tab1.Length >= 1)
+                        string result = response.Content.ReadAsStringAsync().Result;
+
+                        if (string.IsNullOrEmpty(result))
                         {
-                            var cookiestab = tab1[0].Split('=');
-                            if (cookiestab.Length >= 2)
+                            throw new ServerUnavailableException("Unable to retrieve WebUI token");
+                        }
+
+                        // Xử lý cookies
+                        if (response.Headers.Contains("Set-Cookie"))
+                        {
+                            var cookies = response.Headers.GetValues("Set-Cookie");
+                            var cookieString = string.Join(";", cookies);
+
+                            if (cookieString.Contains("GUID"))
                             {
-                                _cookie = new Cookie(cookiestab[0], cookiestab[1]) { Domain = _baseUrl };
+                                var tab1 = cookieString.Split(';');
+                                if (tab1.Length >= 1)
+                                {
+                                    var cookiestab = tab1[0].Split('=');
+                                    if (cookiestab.Length >= 2)
+                                    {
+                                        _cookie = new Cookie(cookiestab[0], cookiestab[1]) { Domain = _baseUrl };
+
+                                        // Tạo lại HttpClient vì cookie đã thay đổi
+                                        DisposeHttpClient();
+                                    }
+                                }
                             }
                         }
-                    }
 
-                    int indexStart = result.IndexOf('<');
-                    int indexEnd = result.IndexOf('>');
-                    while (indexStart >= 0 && indexEnd >= 0 && indexStart <= indexEnd)
-                    {
-                        result = result.Remove(indexStart, indexEnd - indexStart + 1);
+                        // Xử lý token từ HTML response
+                        int indexStart = result.IndexOf('<');
+                        int indexEnd = result.IndexOf('>');
+                        while (indexStart >= 0 && indexEnd >= 0 && indexStart <= indexEnd)
+                        {
+                            result = result.Remove(indexStart, indexEnd - indexStart + 1);
 
-                        indexStart = result.IndexOf('<');
-                        indexEnd = result.IndexOf('>');
+                            indexStart = result.IndexOf('<');
+                            indexEnd = result.IndexOf('>');
+                        }
+
+                        _tokenGetTime = DateTime.Now;
+                        _token = result;
                     }
-                    _tokenGetTime = DateTime.Now;
-                    _token = result;
-                }
-            }
-            catch (WebException ex)
-            {
-                _tokenGetTime = DateTime.MinValue;
-                if (ex.Response is HttpWebResponse webResponse)
-                {
-                    if (webResponse.StatusCode == HttpStatusCode.Unauthorized)
+                    else if (response.StatusCode == HttpStatusCode.Unauthorized)
                     {
                         throw new InvalidCredentialException();
                     }
+                    else
+                    {
+                        throw new ServerUnavailableException($"Unable to retrieve WebUI token. Status: {response.StatusCode}");
+                    }
                 }
-                throw new ServerUnavailableException("Unable to retreive WebUI token", ex);
+            }
+            catch (HttpRequestException ex)
+            {
+                _tokenGetTime = DateTime.MinValue;
+                throw new ServerUnavailableException("Unable to retrieve WebUI token", ex);
+            }
+            catch (Exception ex) when (!(ex is ServerUnavailableException || ex is InvalidCredentialException))
+            {
+                _tokenGetTime = DateTime.MinValue;
+                throw new ServerUnavailableException("Unable to retrieve WebUI token", ex);
             }
         }
-
-
 
         private async Task<TResponse> ExecuteRequest<TResponse>(BaseRequest<TResponse> request) where TResponse : BaseResponse, new()
         {
@@ -496,6 +535,8 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
 
                 string token = Token;
                 request.SetBaseUrl(new Uri(_baseUrl));
+
+                // Vẫn sử dụng phương thức cũ vì cần điều chỉnh nhiều lớp con khác
                 var response = request.ProcessRequest(token, _logOn, _password, _cookie);
 
                 if (response?.Result != null && response?.Result.CacheId != 0)
@@ -509,7 +550,6 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
                 _semaphore.Release();
             }
         }
-
 
         private void SetCacheId<T>(BaseRequest<T> request, int cacheId) where T : BaseResponse, new()
         {
@@ -540,7 +580,6 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
                         var downloadSpeed = downloadList.Sum(y => y.DownloadSpeed);
                         if (downloadSpeed == 0)
                         {
-
                             _speedZeroCounter++;
 #if DEBUG
                             Console.WriteLine($"{DateTime.Now} [FREEZER ENGINE DETECTOR] Detect download zero count [{_speedZeroCounter}]");
@@ -578,6 +617,40 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
         {
             if (_speedZeroCounter != 0)
                 _speedZeroCounter = 0;
+        }
+
+        // Giải phóng HttpClient
+        private void DisposeHttpClient()
+        {
+            if (_httpClient != null)
+            {
+                _httpClient.Dispose();
+                _httpClient = null;
+            }
+        }
+
+        // Triển khai IDisposable
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed) return;
+
+            if (disposing)
+            {
+                DisposeHttpClient();
+            }
+
+            _disposed = true;
+        }
+
+        ~TorrentApi()
+        {
+            Dispose(false);
         }
     }
 }

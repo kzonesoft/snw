@@ -1,9 +1,8 @@
 ﻿using Kzone.Engine.Controller.Domain.Entities;
 using Kzone.Engine.Controller.Infrastructure.Api.Responses;
 using System;
+using System.Net.Http;
 using System.Text;
-
-
 
 namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
 {
@@ -46,6 +45,13 @@ namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
                 return;
 
             result.AddedTorrent = FindAddedTorrent(result);
+        }
+
+        // Phương thức trừu tượng từ BaseRequest - lớp cha là abstract nên không triển khai
+        // Các lớp con sẽ cần triển khai phương thức này
+        protected override void OnProcessingRequest(HttpClient httpClient, HttpRequestMessage requestMessage)
+        {
+            // Chi tiết xử lý sẽ được triển khai trong các lớp con
         }
     }
 }
