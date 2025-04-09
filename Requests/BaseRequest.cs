@@ -217,61 +217,53 @@ namespace Kzone.Engine.Controller.Infrastructure.Api.Requests
             {
                 Uri uri = ToUrl(token);
 
-                using (var httpClientHandler = new HttpClientHandler())
+                // Tạo CookieContainer nếu cần
+                CookieContainer cookieContainer = null;
+                if (cookie != null)
                 {
-                    // Thiết lập thông tin xác thực
-                    httpClientHandler.Credentials = new NetworkCredential(logOn, password);
+                    cookieContainer = new CookieContainer();
+                    var cookieUri = cookie.Domain != null ? new Uri(cookie.Domain) : BaseUrl;
+                    cookieContainer.Add(uri, cookie);
+                }
 
-                    // Thiết lập cookie nếu có
-                    if (cookie != null)
-                    {
-                        httpClientHandler.CookieContainer = new CookieContainer();
-                        var cookieUri = cookie.Domain != null ? new Uri(cookie.Domain) : BaseUrl;
-                        httpClientHandler.CookieContainer.Add(uri, new Cookie(cookie.Name, cookie.Value));
-                    }
+                // Lấy hoặc tạo HttpClient từ factory
+                var httpClient = HttpClientFactory.GetOrCreateClient(BaseUrl?.ToString(), logOn, password, cookieContainer);
 
-                    // Tạo HttpClient
-                    using (var httpClient = new HttpClient(httpClientHandler))
-                    {
-                        httpClient.Timeout = TimeSpan.FromSeconds(30);
+                // Tạo HttpRequestMessage
+                using (var requestMessage = new HttpRequestMessage(HttpMethod.Get, uri))
+                {
+                    // Cho phép lớp con xử lý request
+                    OnProcessingRequest(httpClient, requestMessage);
 
-                        // Tạo HttpRequestMessage
-                        using (var requestMessage = new HttpRequestMessage(HttpMethod.Get, uri))
-                        {
-                            // Cho phép lớp con xử lý request
-                            OnProcessingRequest(httpClient, requestMessage);
+                    // Gửi request và đọc response
+                    var response = httpClient.SendAsync(requestMessage).Result;
 
-                            // Gửi request và đọc response
-                            var response = httpClient.SendAsync(requestMessage).Result;
+                    // Đọc và xử lý dữ liệu phản hồi
+                    var jsonResult = response.Content.ReadAsStringAsync().Result;
 
-                            // Đọc và xử lý dữ liệu phản hồi
-                            var jsonResult = response.Content.ReadAsStringAsync().Result;
+                    var result = JsonParser.ParseJsonResult(jsonResult);
 
-                            var result = JsonParser.ParseJsonResult(jsonResult);
+                    if (result != null && result.CacheId != 0)
+                        CacheId = result.CacheId;
 
-                            if (result != null && result.CacheId != 0)
-                                CacheId = result.CacheId;
+                    result.StatusCode = response.StatusCode;
 
-                            result.StatusCode = response.StatusCode;
-
-                            var ret = new T { Result = result };
-                            OnProcessedRequest(ret);
-                            return ret;
-                        }
-                    }
+                    var ret = new T { Result = result };
+                    OnProcessedRequest(ret);
+                    return ret;
                 }
             }
             catch (HttpRequestException)
             {
-                return default;
+                return default(T);
             }
             catch (WebException)
             {
-                return default;
+                return default(T);
             }
             catch (TaskCanceledException) // Timeout
             {
-                return default;
+                return default(T);
             }
         }
     }

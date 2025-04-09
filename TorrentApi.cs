@@ -21,7 +21,7 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
 {
     public class TorrentApi : ITorrentApi, IDisposable
     {
-        private readonly AsyncSemaphore _semaphore = new(1);
+        private readonly AsyncSemaphore _semaphore = new AsyncSemaphore(1);
         private string _logOn;
         private string _password;
         private string _ip = IPAddress.Loopback.ToString();
@@ -33,7 +33,7 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
 
         private DateTime _tokenGetTime = DateTime.MinValue;
         private TimeSpan _timeSpanTokenTimeout = TimeSpan.FromMinutes(20);
-        private Uri _tokenUrl => new(_baseUrl + "token.html");
+        private Uri _tokenUrl => new Uri(_baseUrl + "token.html");
         private bool _useCache;
 
         private int _speedZeroCounter = 0;
@@ -44,9 +44,6 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
         private DateTime _lastGetDataSuccess = DateTime.MinValue;
 
         private readonly object _lock = new object();
-
-        // HttpClient instance, tạo khi cần
-        private HttpClient _httpClient;
         private bool _disposed;
 
         public TorrentApi(bool useCache = false)
@@ -66,46 +63,6 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
             }
         }
 
-        // Tạo và quản lý HttpClient instance
-        private HttpClient HttpClient
-        {
-            get
-            {
-                if (_httpClient == null)
-                {
-                    _httpClient = CreateHttpClient();
-                }
-                return _httpClient;
-            }
-        }
-
-        // Tạo mới HttpClient với cấu hình hiện tại
-        private HttpClient CreateHttpClient()
-        {
-            var handler = new HttpClientHandler
-            {
-                Credentials = new NetworkCredential(_logOn, _password)
-            };
-
-            // Nếu có cookie, thêm vào HttpClient
-            if (_cookie != null)
-            {
-                handler.CookieContainer = new CookieContainer();
-                handler.CookieContainer.Add(new Uri(_baseUrl), _cookie);
-            }
-
-            var client = new HttpClient(handler)
-            {
-                BaseAddress = new Uri(_baseUrl),
-                Timeout = TimeSpan.FromSeconds(30)
-            };
-
-            client.DefaultRequestHeaders.Accept.Clear();
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            return client;
-        }
-
         public void ConfigureAccess(int port, string userName, string password)
         {
             _semaphore.Wait();
@@ -121,9 +78,6 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
                 _lastGetDataSuccess = DateTime.MinValue;
                 _tokenGetTime = DateTime.MinValue;
                 _baseUrl = string.Format(System.Globalization.CultureInfo.InvariantCulture, "http://{0}:{1}/api/", _ip, _port);
-
-                // Tạo HttpClient mới với cấu hình đã cập nhật
-                DisposeHttpClient();
 
 #if DEBUG
                 Console.WriteLine($"ENGINE API SESSION GENERATE : {_baseUrl}{Environment.NewLine}" +
@@ -142,18 +96,29 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
         {
             try
             {
-                // Sử dụng HttpClient được tạo mới cho thao tác này để tránh ảnh hưởng bởi cấu hình hiện tại
-                using (var httpClient = new HttpClient())
+                // Sử dụng HttpClientFactory để lấy client
+                var httpClient = HttpClientFactory.GetOrCreateClient(_baseUrl, _logOn, _password);
+
+                // Thiết lập timeout thấp cho request này
+                using (var timeoutClient = new HttpClient())
                 {
-                    var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_logOn}:{_password}"));
-                    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
-                    httpClient.Timeout = TimeSpan.FromSeconds(2);
+                    timeoutClient.Timeout = TimeSpan.FromSeconds(2);
+
+                    // Sao chép headers từ client gốc
+                    if (httpClient.DefaultRequestHeaders.Authorization != null)
+                    {
+                        timeoutClient.DefaultRequestHeaders.Authorization = httpClient.DefaultRequestHeaders.Authorization;
+                    }
+                    else
+                    {
+                        var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_logOn}:{_password}"));
+                        timeoutClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+                    }
 
                     using (var cts = CancellationTokenSource.CreateLinkedTokenSource(token))
                     {
                         cts.CancelAfter(TimeSpan.FromSeconds(2));
-
-                        var response = await httpClient.GetAsync(_baseUrl, cts.Token).ConfigureAwait(false);
+                        var response = await timeoutClient.GetAsync(_baseUrl, cts.Token).ConfigureAwait(false);
                         return response.IsSuccessStatusCode;
                     }
                 }
@@ -438,77 +403,75 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
 
         #endregion
 
-        
+
         private void GetToken()
         {
             try
             {
-                // Tạo HttpClient tạm thời cho việc lấy token
-                using (var httpClient = new HttpClient())
+                // Sử dụng HttpClientFactory để lấy client
+                var httpClient = HttpClientFactory.GetOrCreateClient(_baseUrl, _logOn, _password);
+
+                // Thiết lập thông tin xác thực nếu chưa
+                if (!httpClient.DefaultRequestHeaders.Contains("Authorization"))
                 {
-                    // Thiết lập thông tin xác thực
                     var credentials = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{_logOn}:{_password}"));
                     httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
-                    httpClient.Timeout = TimeSpan.FromSeconds(10);
+                }
 
-                    // Gửi request đồng bộ (vì phương thức gốc là đồng bộ)
-                    var response = httpClient.GetAsync(_tokenUrl).Result;
+                // Gửi request đồng bộ (vì phương thức gốc là đồng bộ)
+                var response = httpClient.GetAsync(_tokenUrl).Result;
 
-                    // Xử lý response
-                    if (response.IsSuccessStatusCode)
+                // Xử lý response
+                if (response.IsSuccessStatusCode)
+                {
+                    string result = response.Content.ReadAsStringAsync().Result;
+
+                    if (string.IsNullOrEmpty(result))
                     {
-                        string result = response.Content.ReadAsStringAsync().Result;
+                        throw new ServerUnavailableException("Unable to retrieve WebUI token");
+                    }
 
-                        if (string.IsNullOrEmpty(result))
+                    // Xử lý cookies
+                    if (response.Headers.Contains("Set-Cookie"))
+                    {
+                        var cookies = response.Headers.GetValues("Set-Cookie");
+                        var cookieString = string.Join(";", cookies);
+
+                        if (cookieString.Contains("GUID"))
                         {
-                            throw new ServerUnavailableException("Unable to retrieve WebUI token");
-                        }
-
-                        // Xử lý cookies
-                        if (response.Headers.Contains("Set-Cookie"))
-                        {
-                            var cookies = response.Headers.GetValues("Set-Cookie");
-                            var cookieString = string.Join(";", cookies);
-
-                            if (cookieString.Contains("GUID"))
+                            var tab1 = cookieString.Split(';');
+                            if (tab1.Length >= 1)
                             {
-                                var tab1 = cookieString.Split(';');
-                                if (tab1.Length >= 1)
+                                var cookiestab = tab1[0].Split('=');
+                                if (cookiestab.Length >= 2)
                                 {
-                                    var cookiestab = tab1[0].Split('=');
-                                    if (cookiestab.Length >= 2)
-                                    {
-                                        _cookie = new Cookie(cookiestab[0], cookiestab[1]) { Domain = _baseUrl };
-
-                                        // Tạo lại HttpClient vì cookie đã thay đổi
-                                        DisposeHttpClient();
-                                    }
+                                    _cookie = new Cookie(cookiestab[0], cookiestab[1]) { Domain = _baseUrl };
                                 }
                             }
                         }
-
-                        // Xử lý token từ HTML response
-                        int indexStart = result.IndexOf('<');
-                        int indexEnd = result.IndexOf('>');
-                        while (indexStart >= 0 && indexEnd >= 0 && indexStart <= indexEnd)
-                        {
-                            result = result.Remove(indexStart, indexEnd - indexStart + 1);
-
-                            indexStart = result.IndexOf('<');
-                            indexEnd = result.IndexOf('>');
-                        }
-
-                        _tokenGetTime = DateTime.Now;
-                        _token = result;
                     }
-                    else if (response.StatusCode == HttpStatusCode.Unauthorized)
+
+                    // Xử lý token từ HTML response
+                    int indexStart = result.IndexOf('<');
+                    int indexEnd = result.IndexOf('>');
+                    while (indexStart >= 0 && indexEnd >= 0 && indexStart <= indexEnd)
                     {
-                        throw new InvalidCredentialException();
+                        result = result.Remove(indexStart, indexEnd - indexStart + 1);
+
+                        indexStart = result.IndexOf('<');
+                        indexEnd = result.IndexOf('>');
                     }
-                    else
-                    {
-                        throw new ServerUnavailableException($"Unable to retrieve WebUI token. Status: {response.StatusCode}");
-                    }
+
+                    _tokenGetTime = DateTime.Now;
+                    _token = result;
+                }
+                else if (response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    throw new InvalidCredentialException();
+                }
+                else
+                {
+                    throw new ServerUnavailableException($"Unable to retrieve WebUI token. Status: {response.StatusCode}");
                 }
             }
             catch (HttpRequestException ex)
@@ -617,16 +580,6 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
                 _speedZeroCounter = 0;
         }
 
-        // Giải phóng HttpClient
-        private void DisposeHttpClient()
-        {
-            if (_httpClient != null)
-            {
-                _httpClient.Dispose();
-                _httpClient = null;
-            }
-        }
-
         // Triển khai IDisposable
         public void Dispose()
         {
@@ -637,12 +590,6 @@ namespace Kzone.Engine.Controller.Infrastructure.Api
         protected virtual void Dispose(bool disposing)
         {
             if (_disposed) return;
-
-            if (disposing)
-            {
-                DisposeHttpClient();
-            }
-
             _disposed = true;
         }
 
